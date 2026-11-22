@@ -1,4 +1,4 @@
-name: Zbuduj instalator PartiMaster
+name: Zbuduj PartiMaster (Windows i Mac)
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -43,10 +43,13 @@ jobs:
           & dist\PartiMaster\tesseract\tesseract.exe --version
           & dist\PartiMaster\tesseract\tesseract.exe --list-langs
 
-      - name: Test - czy program sie uruchamia (bez okna)
+      - name: Test - program czyta tekst dolaczonym Tesseractem
         shell: pwsh
         run: |
-          python -c "import sys; sys.path.insert(0, 'program'); import partytury_core as c; print('ok', c.order_key('Trumpet 2'))"
+          $out = Join-Path $env:RUNNER_TEMP 'selftest.txt'
+          Start-Process -Wait -FilePath dist\PartiMaster\PartiMaster.exe -ArgumentList '--selftest', $out
+          Get-Content $out
+          if (-not (Select-String -Path $out -Pattern 'SELFTEST OK' -Quiet)) { throw 'Test nie przeszedl' }
 
       - name: Zbuduj PartiMaster-setup.exe
         shell: pwsh
@@ -61,10 +64,104 @@ jobs:
           name: PartiMaster-setup
           path: Output/PartiMaster-setup.exe
 
+  mac:
+    runs-on: macos-latest        # Mac z procesorem Apple (seria M)
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Biblioteki programu
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r program/requirements.txt pyinstaller
+
+      - name: Tesseract OCR
+        run: brew install tesseract dylibbundler
+
+      - name: Program -> PartiMaster.app
+        run: >
+          pyinstaller --noconfirm --clean --windowed --name PartiMaster
+          --icon program/partytury.ico --add-data "program/partytury.ico:."
+          --osx-bundle-identifier pl.kubisiak.partimaster
+          --collect-all pypdfium2 --collect-all pypdfium2_raw --collect-all tkinterdnd2 --collect-all sv_ttk
+          program/partytury.py
+
+      - name: Dolacz Tesseract OCR do programu
+        run: |
+          set -e
+          T=dist/PartiMaster.app/Contents/Resources/tesseract
+          mkdir -p "$T/tessdata"
+          cp "$(brew --prefix tesseract)/bin/tesseract" "$T/tesseract"
+          cp "$(brew --prefix tesseract)/share/tessdata/eng.traineddata" "$T/tessdata/"
+          chmod -R u+w "$T"
+          dylibbundler -cd -of -b -x "$T/tesseract" -d "$T/libs" -p @executable_path/libs/ -s "$(brew --prefix)/lib"
+          chmod -R u+w "$T"
+          for f in "$T"/libs/*.dylib "$T/tesseract"; do codesign --force --sign - "$f"; done
+          if otool -L "$T/tesseract" "$T"/libs/*.dylib | grep -E '/opt/homebrew|/usr/local'; then
+            echo 'Tesseract nadal korzysta z bibliotek Homebrew'; exit 1
+          fi
+          TESSDATA_PREFIX="$T/tessdata" "$T/tesseract" --version
+          TESSDATA_PREFIX="$T/tessdata" "$T/tesseract" --list-langs
+
+      - name: Informacje o programie (PDF w "Otworz za pomoca", wersja)
+        run: |
+          set -e
+          P=dist/PartiMaster.app/Contents/Info.plist
+          plutil -replace CFBundleShortVersionString -string "1.4" "$P"
+          plutil -replace CFBundleDisplayName -string "PartiMaster" "$P"
+          plutil -replace NSHumanReadableCopyright -string "PartiMaster - Marek Kubisiak" "$P"
+          plutil -replace CFBundleDocumentTypes -json '[{"CFBundleTypeName":"PDF","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["com.adobe.pdf"]}]' "$P"
+          plutil -lint "$P"
+
+      - name: Podpis (ad-hoc)
+        run: |
+          codesign --force --deep --sign - dist/PartiMaster.app
+          codesign --verify --verbose dist/PartiMaster.app
+
+      - name: Test - program czyta tekst dolaczonym Tesseractem
+        run: |
+          set -e
+          OUT="$RUNNER_TEMP/selftest.txt"
+          dist/PartiMaster.app/Contents/MacOS/PartiMaster --selftest "$OUT" || true
+          cat "$OUT"
+          grep -q 'SELFTEST OK' "$OUT"
+
+      - name: Zbuduj PartiMaster-Mac.dmg
+        run: |
+          set -e
+          mkdir dmg
+          cp -R dist/PartiMaster.app dmg/
+          ln -s /Applications dmg/Aplikacje
+          for i in 1 2 3 4 5; do
+            hdiutil create -volname PartiMaster -srcfolder dmg -ov -format UDZO PartiMaster-Mac.dmg && break
+            sleep 10
+          done
+          test -f PartiMaster-Mac.dmg
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: PartiMaster-Mac
+          path: PartiMaster-Mac.dmg
+
+  wydanie:
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: pliki
+          merge-multiple: true
+
       - name: Opublikuj w zakladce Releases
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.3.${{ github.run_number }}"
-          gh release create $tag Output/PartiMaster-setup.exe --title "PartiMaster $tag - Marek Kubisiak" --notes "Instalator programu PartiMaster (autor: Marek Kubisiak). Pobierz PartiMaster-setup.exe i uruchom."
+          ls -la pliki
+          tag="v1.4.${{ github.run_number }}"
+          gh release create "$tag" pliki/PartiMaster-setup.exe pliki/PartiMaster-Mac.dmg \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+            --title "PartiMaster $tag - Marek Kubisiak" \
+            --notes "PartiMaster (autor: Marek Kubisiak). Windows: pobierz PartiMaster-setup.exe i uruchom. Mac (procesor Apple, seria M): pobierz PartiMaster-Mac.dmg, otworz i przeciagnij PartiMaster do folderu Aplikacje."
