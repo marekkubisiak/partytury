@@ -45,8 +45,56 @@ COL_SEL = "#005fb8"       # niebieski akcent Windows 11
 BG = "#f3f3f3"            # tło obszaru miniatur
 CARD = "#ffffff"
 LINE = "#e0e0e0"
+TEXT = "#1a1a1a"
 FONT = "Segoe UI"         # zmieniane na Segoe UI Variable, jeśli jest w systemie
 ACCENT = "TButton"        # styl przycisków głównych (Accent.TButton z motywem)
+
+PALETTES = {
+    "light": dict(COL_START="#0f7b0f", COL_CONT="#5c5c5c", COL_EXCL="#c42b1c", COL_DUP="#b35900",
+                  COL_SEL="#005fb8", BG="#f3f3f3", CARD="#ffffff", LINE="#e0e0e0", TEXT="#1a1a1a"),
+    "dark": dict(COL_START="#6ccb5f", COL_CONT="#a8a8a8", COL_EXCL="#ff99a4", COL_DUP="#f7b955",
+                 COL_SEL="#60cdff", BG="#202020", CARD="#2b2b2b", LINE="#3d3d3d", TEXT="#ffffff"),
+}
+THEME = "light"
+
+
+def _settings_path():
+    import tempfile
+    d = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "Partytury")
+    return os.path.join(d, "ustawienia.json")
+
+
+def load_settings():
+    try:
+        import json
+        with open(_settings_path(), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_settings(**kw):
+    try:
+        import json
+        st = load_settings()
+        st.update(kw)
+        os.makedirs(os.path.dirname(_settings_path()), exist_ok=True)
+        with open(_settings_path(), "w", encoding="utf-8") as f:
+            json.dump(st, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+
+def set_palette(mode):
+    """Ustawia kolory (jasne/ciemne) i motyw Sun Valley."""
+    global THEME
+    THEME = "dark" if mode == "dark" else "light"
+    globals().update(PALETTES[THEME])
+    if sv_ttk is not None:
+        try:
+            sv_ttk.set_theme(THEME)
+        except Exception:
+            pass
 
 
 def apply_win11_look(root):
@@ -64,6 +112,7 @@ def apply_win11_look(root):
             ACCENT = "Accent.TButton"
         except Exception:
             pass
+    set_palette(load_settings().get("motyw", "light"))
     for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
         try:
             tkfont.nametofont(name).configure(family=FONT, size=10)
@@ -77,7 +126,7 @@ def apply_win11_look(root):
 
 
 def _dwm_round_corners(root):
-    """Windows 11: zaokrąglone rogi okna (na starszych Windows bez efektu)."""
+    """Windows 11: zaokrąglone rogi okna i pasek tytułu w kolorze motywu."""
     if os.name != "nt":
         return
     try:
@@ -86,6 +135,8 @@ def _dwm_round_corners(root):
         hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
         val = ctypes.c_int(2)      # DWMWCP_ROUND
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(val), ctypes.sizeof(val))
+        dark = ctypes.c_int(1 if THEME == "dark" else 0)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
     except Exception:
         pass
 
@@ -115,6 +166,7 @@ class App(tk.Tk):
         self.drop_ok = False
         self._drop_procs = []
         self._build_ui()
+        self.apply_theme()
         self._set_buttons()
         self.after(400, self._enable_drop)     # dopiero gdy okno jest już na ekranie
         if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
@@ -136,6 +188,8 @@ class App(tk.Tk):
         ttk.Button(top, text="📚 Wiele plików: uporządkuj…", command=lambda: self.batch("order")).pack(side="left", padx=4)
         ttk.Button(top, text="📚 Wiele plików: wyodrębnij partię…", command=lambda: self.batch("extract")).pack(side="left", padx=4)
         ttk.Button(top, text="❓ Pomoc", command=self.help).pack(side="right")
+        self.b_theme = ttk.Button(top, text="", command=self.toggle_theme)
+        self.b_theme.pack(side="right", padx=4)
 
         body = ttk.PanedWindow(self, orient="horizontal")
         body.pack(fill="both", expand=True)
@@ -193,7 +247,7 @@ class App(tk.Tk):
         box3 = ttk.LabelFrame(right, text="Kolejność po uporządkowaniu", padding=8)
         box3.pack(fill="both", expand=True, pady=4)
         self.order_list = tk.Listbox(box3, font=(FONT, 10), activestyle="none", relief="flat", bd=0,
-                                     background=CARD, foreground="#1a1a1a", selectbackground=COL_SEL,
+                                     background=CARD, foreground=TEXT, selectbackground=COL_SEL,
                                      selectforeground="white", highlightthickness=1,
                                      highlightbackground=LINE, highlightcolor=COL_SEL)
         self.order_list.pack(fill="both", expand=True)
@@ -538,6 +592,40 @@ class App(tk.Tk):
         self.warn.configure(text="\n".join(warns))
         self._set_buttons()
 
+    # ------------------------------------------------------------- motyw
+    def toggle_theme(self):
+        self.apply_theme("light" if THEME == "dark" else "dark")
+        save_settings(motyw=THEME)
+
+    def apply_theme(self, mode=None):
+        """Przełącza jasny/ciemny wygląd i przemalowuje zwykłe (nie-ttk) elementy okna."""
+        if mode:
+            set_palette(mode)
+        self.b_theme.configure(text="☀ Jasny" if THEME == "dark" else "🌙 Ciemny")
+        try:
+            self.configure(background=ttk.Style(self).lookup("TFrame", "background") or BG)
+        except Exception:
+            pass
+        for w, kw in ((self.canvas, dict(background=BG)), (self.grid_frame, dict(background=BG)),
+                      (self.hint, dict(background=BG, foreground=COL_CONT)),
+                      (self.preview, dict(background=CARD, highlightbackground=LINE)),
+                      (self.order_list, dict(background=CARD, foreground=TEXT, selectbackground=COL_SEL,
+                                             selectforeground=BG, highlightbackground=LINE,
+                                             highlightcolor=COL_SEL)),
+                      (self.warn, dict(foreground=COL_EXCL)), (self.status, dict(foreground=COL_CONT))):
+            try:
+                w.configure(**kw)
+            except Exception:
+                pass
+        for cell, img, cap in self.cells.values():
+            try:
+                img.configure(background=CARD, foreground=COL_CONT)
+                cap.configure(background=BG)
+            except Exception:
+                pass
+        self.refresh_cells()
+        _dwm_round_corners(self)
+
     def refresh_cells(self):
         if not self.proj:
             return
@@ -823,7 +911,8 @@ def show_report(parent, title, text):
     win.title(title)
     _bg(win)
     t = tk.Text(win, width=100, height=min(30, text.count("\n") + 3), font=(FONT, 10), relief="flat",
-                bd=0, padx=10, pady=8, background=CARD, highlightthickness=1, highlightbackground=LINE)
+                bd=0, padx=10, pady=8, background=CARD, foreground=TEXT, insertbackground=TEXT,
+                highlightthickness=1, highlightbackground=LINE)
     t.insert("1.0", text)
     t.configure(state="disabled")
     t.pack(padx=8, pady=8)
