@@ -357,6 +357,21 @@ class Project:
     def export_ordered(self, out_path):
         return self._write(self.ordered_parts(), out_path)
 
+    def export_pages(self, pages, out_path):
+        """Wybrane strony (w kolejności numerów) jako jeden PDF, z zakładkami partii."""
+        reader = pypdf.PdfReader(self.path)
+        w = pypdf.PdfWriter()
+        last = None
+        for i, p in enumerate(sorted(set(pages))):
+            w.add_page(reader.pages[p - 1])
+            name, _ = self.part_of(p)
+            if name and name != last:
+                w.add_outline_item(name, i)
+            last = name
+        with open(out_path, "wb") as f:
+            w.write(f)
+        return len(w.pages)
+
     def export_matching(self, query, out_path):
         parts = [(n, ps) for n, ps in self.ordered_parts() if matches(n, query)]
         if not parts:

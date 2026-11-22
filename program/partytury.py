@@ -10,6 +10,8 @@ Jak używać:
  3. Duplikaty: program sam podpowiada identyczne strony (pomarańczowe), przycisk usuwa je.
     Dowolną stronę można usunąć/przywrócić klawiszem Delete.
  4. Zapisz uporządkowany PDF albo wyodrębnij partię (np. bas) - także z wielu plików naraz.
+ 5. Własny wybór stron: Ctrl+klik (Mac: ⌘+klik) dodaje stronę do zaznaczenia,
+    Shift+klik zaznacza zakres, Ctrl+A wszystkie – potem „Zapisz zaznaczone strony”.
 Opis partii zapisuje się automatycznie obok PDF-a (plik .partie.json).
 """
 import os
@@ -31,7 +33,7 @@ IS_MAC = sys.platform == "darwin"
 
 APP_NAME = "PartiMaster"
 APP_AUTHOR = "Marek Kubisiak"
-APP_VERSION = "1.4"
+APP_VERSION = "1.5"
 APP_TITLE = f"{APP_NAME} – {APP_AUTHOR}"
 
 THUMB_SCALE = 0.25
@@ -176,6 +178,7 @@ class App(tk.Tk):
         self.minsize(1000, 650)
         self.proj = None
         self.sel = None
+        self.marked = set()          # strony zaznaczone do zapisu jako osobny PDF
         self.cells = {}
         self.thumb_imgs = {}
         self.small = {}
@@ -260,6 +263,15 @@ class App(tk.Tk):
         self.b_excl.grid(row=2, column=0, sticky="w", pady=2)
         box.columnconfigure(0, weight=1)
 
+        boxm = ttk.LabelFrame(right, text="Wybrane strony → własny PDF", padding=8)
+        boxm.pack(fill="x", pady=4)
+        mod = "⌘" if IS_MAC else "Ctrl"
+        self.mark_label = ttk.Label(boxm, wraplength=460,
+                                    text=f"{mod}+klik – dodaj/odejmij stronę,  Shift+klik – zakres,  {mod}+A – wszystkie.")
+        self.mark_label.pack(anchor="w")
+        self.b_marked = ttk.Button(boxm, text="📄 Zapisz zaznaczone strony jako PDF…", command=self.save_marked)
+        self.b_marked.pack(anchor="w", pady=(6, 0))
+
         box2 = ttk.LabelFrame(right, text="Duplikaty", padding=8)
         box2.pack(fill="x", pady=4)
         self.dup_label = ttk.Label(box2, text="—", wraplength=460)
@@ -285,6 +297,8 @@ class App(tk.Tk):
         for key, d in (("<Left>", -1), ("<Right>", 1), ("<Up>", -COLS), ("<Down>", COLS)):
             self.bind(key, lambda e, d=d: self._move(d, e))
         self.bind("<Delete>", lambda e: self.toggle_excl() if self.focus_get() is not self.combo else None)
+        for k in (("<Command-a>", "<Command-A>") if IS_MAC else ("<Control-a>", "<Control-A>")):
+            self.bind(k, self.select_all)
         if IS_MAC:                                # na Macu klawisz „delete” to BackSpace
             self.bind("<BackSpace>", lambda e: self.toggle_excl() if self.focus_get() is not self.combo else None)
 
@@ -416,7 +430,8 @@ class App(tk.Tk):
 
     def _set_buttons(self):
         st = "normal" if self.proj else "disabled"
-        for b in (self.b_save, self.b_extract, self.b_auto, self.b_start, self.b_cont, self.b_excl, self.b_dups):
+        for b in (self.b_save, self.b_extract, self.b_auto, self.b_start, self.b_cont, self.b_excl, self.b_dups,
+                  self.b_marked):
             b.configure(state=st)
         if self.proj and not self.proj.dups:
             self.b_dups.configure(state="disabled")
@@ -439,6 +454,7 @@ class App(tk.Tk):
             w.destroy()
         self.cells, self.thumb_imgs, self.small = {}, {}, {}
         self.sel = None
+        self.marked = set()
         self.title(f"{APP_TITLE}   |   {os.path.basename(path)}")
         for p in range(1, self.proj.n + 1):
             cell = tk.Frame(self.grid_frame, background=BG, bd=3, relief="flat", cursor="hand2")
@@ -450,6 +466,9 @@ class App(tk.Tk):
             cap.pack(fill="x")
             for w in (cell, img, cap):
                 w.bind("<Button-1>", lambda e, p=p: self.select(p))
+                w.bind("<Shift-Button-1>", lambda e, p=p: self.select(p, "range"))
+                for mk in (("<Command-Button-1>", "<Control-Button-1>") if IS_MAC else ("<Control-Button-1>",)):
+                    w.bind(mk, lambda e, p=p: self.select(p, "toggle"))
                 if self.drop_ok and not getattr(self, "_drop_procs", None):
                     try:
                         from tkinterdnd2 import DND_FILES
@@ -493,10 +512,22 @@ class App(tk.Tk):
             self.refresh()
 
     # ------------------------------------------------------------- zaznaczanie
-    def select(self, p):
+    def select(self, p, mode="single"):
+        """mode: single – zwykłe kliknięcie, toggle – Ctrl/⌘+klik, range – Shift+klik."""
         if not self.proj or p < 1 or p > self.proj.n:
             return
+        if mode == "toggle":
+            if p in self.marked and len(self.marked) > 1:
+                self.marked.discard(p)
+            else:
+                self.marked.add(p)
+        elif mode == "range" and self.sel:
+            a, b = sorted((self.sel, p))
+            self.marked |= set(range(a, b + 1))
+        else:
+            self.marked = {p}
         self.sel = p
+        self._update_marked()
         self.refresh_cells()
         name, is_start = self.proj.part_of(p)
         if is_start:
@@ -509,6 +540,44 @@ class App(tk.Tk):
     def _suggest_name(self):
         prev = [n for q, n in sorted(self.proj.starts.items()) if q < self.sel]
         return core.next_name(prev[-1]) if prev else ""
+
+    def select_all(self, e=None):
+        if not self.proj or self.focus_get() is self.combo:
+            return
+        self.marked = set(range(1, self.proj.n + 1))
+        self._update_marked()
+        self.refresh_cells()
+        return "break"
+
+    def _update_marked(self):
+        mod = "⌘" if IS_MAC else "Ctrl"
+        if len(self.marked) > 1:
+            txt = (f"Zaznaczone: {pl(len(self.marked), 'strona', 'strony', 'stron')} "
+                   f"({self._ranges(sorted(self.marked))}).  Zwykłe kliknięcie anuluje zaznaczenie.")
+        else:
+            txt = f"{mod}+klik – dodaj/odejmij stronę,  Shift+klik – zakres,  {mod}+A – wszystkie."
+        self.mark_label.configure(text=txt)
+
+    def save_marked(self):
+        if not self.proj:
+            return
+        pages = sorted(self.marked or ({self.sel} if self.sel else set()))
+        if not pages:
+            messagebox.showinfo("Brak stron", "Kliknij strony po lewej (Ctrl+klik, Shift+klik), które mają trafić do pliku.")
+            return
+        base = os.path.splitext(os.path.basename(self.proj.path))[0]
+        name, _ = self.proj.part_of(pages[0])
+        sugg = f"{base}_{file_label(name)}" if name and not name.startswith(core.UNKNOWN) else f"{base}_strony"
+        out = filedialog.asksaveasfilename(title=f"Zapisz {pl(len(pages), 'stronę', 'strony', 'stron')} jako PDF – wpisz nazwę",
+                                           defaultextension=".pdf", initialdir=os.path.dirname(self.proj.path),
+                                           initialfile=sugg + ".pdf", filetypes=[("PDF", "*.pdf")])
+        if not out:
+            return
+        if os.path.abspath(out) == os.path.abspath(self.proj.path):
+            messagebox.showerror("Błąd", "Wybierz inną nazwę – nie nadpisuję oryginału.")
+            return
+        n = self.proj.export_pages(pages, out)
+        messagebox.showinfo("Gotowe", f"Zapisano {pl(n, 'stronę', 'strony', 'stron')} ({self._ranges(pages)}):\n{out}")
 
     def _move(self, d, e):
         if self.focus_get() is self.combo or not self.proj:
@@ -567,10 +636,11 @@ class App(tk.Tk):
     def toggle_excl(self):
         if not self.proj or not self.sel:
             return
-        if self.sel in self.proj.excluded:
-            self.proj.excluded.discard(self.sel)
+        pages = self.marked if len(self.marked) > 1 else {self.sel}
+        if pages <= self.proj.excluded:          # wszystkie usunięte -> przywróć
+            self.proj.excluded -= pages
         else:
-            self.proj.excluded.add(self.sel)
+            self.proj.excluded |= pages
         self._changed()
 
     def exclude_dups(self):
@@ -675,9 +745,12 @@ class App(tk.Tk):
             if p in self.proj.dups and p not in self.proj.excluded:
                 txt += f"\n⚠ kopia str. {self.proj.dups[p]}"
                 col = COL_DUP
+            if p in self.marked and len(self.marked) > 1:
+                txt = "☑ " + txt
             cap.configure(text=txt, foreground=col,
                           font=(FONT, 9, "bold" if is_start or p in self.proj.excluded else "normal"))
-            border = COL_SEL if p == self.sel else (COL_EXCL if p in self.proj.excluded else BG)
+            border = (COL_SEL if p == self.sel or (p in self.marked and len(self.marked) > 1)
+                      else (COL_EXCL if p in self.proj.excluded else BG))
             cell.configure(background=border)
 
     def _jump_from_list(self, e):
