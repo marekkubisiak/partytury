@@ -1,0 +1,201 @@
+PARTIMASTER – Marek Kubisiak
+INSTRUKCJA OBSŁUGI
+============================
+
+Program porządkuje PDF-y z partiami: usuwa powtórzone strony, układa partie
+w kolejności jak w partyturze i wyciąga wybraną partię (np. Trumpet 1, bas)
+– z jednego utworu albo z wielu naraz.
+
+Oryginalne pliki PDF nigdy nie są zmieniane – program zawsze zapisuje nowe.
+
+
+------------------------------------------------------------
+INSTALACJA I AKTUALIZACJA
+------------------------------------------------------------
+1. Pobierz instalator (zawsze najnowsza wersja):
+   https://github.com/marekkubisiak/partytury/releases/latest
+   → kliknij „PartiMaster-setup.exe”.
+2. Uruchom go. Jeśli Windows napisze „System Windows ochronił ten komputer”:
+   „Więcej informacji” → „Uruchom mimo to”.
+3. Klikaj „Dalej”. Program pojawi się w menu Start (i na pulpicie).
+Nowa wersja instaluje się na starą – nic nie trzeba odinstalowywać.
+Odinstalowanie: Ustawienia → Aplikacje → PartiMaster.
+Wersja PartiMaster sama usuwa wcześniejszy program „Partytury” i jego skróty.
+
+
+------------------------------------------------------------
+JAK OTWORZYĆ PDF
+------------------------------------------------------------
+Dowolny z tych sposobów:
+- przeciągnij plik PDF myszką na okno programu,
+- upuść plik PDF na ikonę „PartiMaster” na pulpicie,
+- prawy przycisk myszy na PDF → „Otwórz za pomocą” → PartiMaster,
+- przycisk „Otwórz PDF…” w programie.
+
+
+------------------------------------------------------------
+WYGLĄD OKNA
+------------------------------------------------------------
+GÓRA – pasek przycisków (opis niżej).
+
+LEWA STRONA – miniatury wszystkich stron PDF-a. Pod każdą jest podpis:
+   „12. ▶ Trumpet 1”      zielony  = tu ZACZYNA się partia Trumpet 1
+   „13.   ↳ Trumpet 1”    szary    = dalsza strona tej samej partii
+   „28. ▶ ?”              zielony ? = początek partii, której nazwy
+                                     program nie odczytał – trzeba wpisać
+   „35. ✖ USUNIĘTA”       czerwony = strona nie trafi do żadnego pliku
+   „⚠ kopia str. 1”       pomarańczowy = strona identyczna z inną (duplikat)
+   Niebieska ramka = strona zaznaczona (kliknięta).
+
+PRAWA STRONA:
+   - „Strona X z Y – nazwa” – numer zaznaczonej strony i jej partia,
+   - powiększenie górnej części strony (tam zwykle jest nazwa instrumentu),
+   - ramka „Zaznaczona strona” – nadawanie nazw i usuwanie stron,
+   - ramka „Duplikaty” – powtórzone strony,
+   - ramka „Kolejność po uporządkowaniu” – lista partii w takiej kolejności,
+     w jakiej zostaną zapisane (z numerami stron). Kliknięcie partii na
+     liście przenosi do jej pierwszej strony,
+   - czerwone ostrzeżenia, np. o partii występującej dwa razy albo
+     o stronach bez nazwy.
+
+DÓŁ – pasek stanu (co program w tej chwili robi).
+
+
+------------------------------------------------------------
+PRZYCISKI NA GÓRNYM PASKU
+------------------------------------------------------------
+[Otwórz PDF…]
+   Wybór pliku PDF do pracy. Program pokazuje miniatury stron i sam szuka
+   identycznych stron (duplikatów). Jeśli plik był już kiedyś opisany,
+   od razu wczytuje ten opis.
+
+[Zapisz uporządkowany PDF…]
+   Zapisuje NOWY plik z całym utworem: partytura na początku, potem partie
+   w kolejności jak w partyturze, bez usuniętych stron. W PDF-ie są zakładki
+   z nazwami partii (widać je w panelu zakładek przeglądarki PDF).
+
+[Wyodrębnij partię…]
+   Zapisuje tylko wybraną partię. Pojawi się okienko – wpisz nazwę partii
+   (np. „Sax alt 1”, „Trumpet 1”, „Trąbka 2”, „Bone 3”) albo wybierz grupę
+   z listy (np. „Bas / kontrabas”, „Fortepian / keyboard”, „Saksofony
+   (wszystkie)”). Plik dostanie nazwę: utwór_wpisana_nazwa.pdf,
+   np. „A Day In The Life_Sax_alt_1.pdf”.
+
+[Rozpoznaj partie automatycznie]
+   Program sam czyta strony (OCR) i proponuje, gdzie zaczyna się każda
+   partia i jak się nazywa. Trwa ok. 10–40 sekund. To jest PROPOZYCJA –
+   zawsze przejrzyj wynik i popraw błędy (patrz „Poprawianie”).
+   Jeśli plik był już opisany, program zapyta, czy zastąpić opis.
+
+[Wiele plików: uporządkuj…]
+   Porządkuje naraz wiele utworów. Zaznacz pliki PDF (Ctrl+A zaznacza
+   wszystkie w folderze), wybierz folder na wyniki, na koniec program
+   zapyta, czy zrobić też plik ZIP. Uwaga: każdy plik musi być wcześniej
+   raz opisany (otwarty i rozpoznany/poprawiony).
+
+[Wiele plików: wyodrębnij partię…]
+   Wyciąga jedną partię ze wszystkich zaznaczonych utworów – np. komplet
+   „Trumpet 1” dla trębacza na cały koncert. Zaznacz PDF-y → wpisz partię
+   → wybierz folder → „Tak” dla ZIP. Na końcu raport pokazuje, z którego
+   utworu co zapisano i gdzie partii nie znaleziono.
+
+[Pomoc]
+   Krótka ściągawka, numer wersji i autor programu.
+
+
+------------------------------------------------------------
+RAMKA „ZAZNACZONA STRONA” (po prawej)
+------------------------------------------------------------
+Pole „Nazwa partii zaczynającej się na tej stronie”
+   Wpisz nazwę albo wybierz ją z listy (strzałka). Po „Trumpet 1” program
+   sam podpowiada „Trumpet 2” itd.
+
+[✔ Początek partii (Enter)]
+   Oznacza zaznaczoną stronę jako pierwszą stronę partii o wpisanej nazwie.
+   Kolejne strony same należą do tej partii, aż do następnej oznaczonej.
+   To samo robi klawisz Enter w polu nazwy.
+
+[↳ To ciąg dalszy]
+   Zaznaczona strona NIE jest początkiem nowej partii, tylko dalszą stroną
+   poprzedniej. Użyj, gdy program niepotrzebnie podzielił partię.
+
+[🗑 Usuń / przywróć stronę (Delete)]
+   Strona nie trafi do żadnego zapisanego pliku (np. pusta strona, drugi
+   skan, stara wersja). Ponowne kliknięcie albo Delete ją przywraca.
+
+
+------------------------------------------------------------
+RAMKA „DUPLIKATY”
+------------------------------------------------------------
+Program sam znajduje strony identyczne z wcześniejszymi (pomarańczowe).
+[🗑 Usuń wszystkie podpowiedziane duplikaty] – usuwa je jednym kliknięciem.
+Partie z tymi samymi nutami, ale inną nazwą (np. Trombone 3 i 4) NIE są
+uznawane za duplikaty.
+Inny skan albo inna wersja tej samej partii nie jest identyczna – takie
+strony usuń sam (Delete). Pomoże ostrzeżenie „Ta sama partia występuje
+kilka razy”.
+
+
+------------------------------------------------------------
+KLAWIATURA
+------------------------------------------------------------
+Strzałki         – poprzednia / następna strona (góra/dół = rząd wyżej/niżej)
+Enter            – (w polu nazwy) zatwierdza początek partii
+Delete           – usuwa / przywraca zaznaczoną stronę
+Kółko myszy      – przewijanie miniatur
+
+
+------------------------------------------------------------
+TYPOWA PRACA – JEDEN UTWÓR
+------------------------------------------------------------
+1. Przeciągnij PDF na okno.
+2. Kliknij „Rozpoznaj partie automatycznie” i poczekaj.
+3. Jeśli są pomarańczowe strony – „Usuń wszystkie podpowiedziane duplikaty”.
+4. Przejrzyj zielone strony (początki partii) i listę po prawej. Popraw:
+   - zła nazwa albo „?”  → kliknij stronę, wpisz nazwę, Enter,
+   - partia rozdzielona niepotrzebnie → kliknij stronę, „↳ To ciąg dalszy”,
+   - brakuje początku partii → kliknij stronę, wpisz nazwę, Enter,
+   - zbędna strona → Delete.
+5. „Zapisz uporządkowany PDF…” albo „Wyodrębnij partię…”.
+Poprawki zapisują się same – po ponownym otwarciu PDF-a wszystko zostaje.
+
+
+------------------------------------------------------------
+TYPOWA PRACA – CAŁY KONCERT
+------------------------------------------------------------
+1. Każdy utwór raz otwórz, rozpoznaj i sprawdź (jak wyżej).
+2. „Wiele plików: wyodrębnij partię…” → zaznacz wszystkie PDF-y →
+   wpisz np. „Trumpet 1” → folder → „Tak” dla ZIP.
+3. Powtórz dla kolejnych partii. Gotowe ZIP-y można wysłać muzykom.
+
+
+------------------------------------------------------------
+NAZWY INSTRUMENTÓW
+------------------------------------------------------------
+Program rozumie nazwy po polsku i angielsku oraz skróty – np. to samo to:
+  Alto Sax 1   = Sax alt 1 = AS 1 = A. Sax 1 = Saksofon altowy 1 = 1st Alto
+  Tenor Sax 2  = Sax ten 2 = TS 2 = T. Sax 2 = Saksofon tenorowy 2
+  Baritone Sax = Bari = BS = B. Sax = Saksofon barytonowy
+  Trumpet 2    = Trąbka 2 = Tr 2 = Tp 2 = Tpt 2 = 2nd Trumpet
+  Trombone 3   = Puzon 3 = Bone 3 = Tb 3 = Tbn 3 = Trb 3
+  Bass Trombone = Puzon basowy = B. Tbn
+  Piano        = Fortepian = Keyboard = Keys = Pno = Klawisze
+  Guitar       = Gitara = Gtr = AGit
+  Bass         = Bas = Kontrabas = Gitara basowa = EBass = Cb
+  Drums        = Perkusja = Dr = D.S.
+  Vocal        = Wokal = Voice = Głos
+  Bass Clarinet = Klarnet basowy
+Przy wyodrębnianiu można wpisać dowolną z tych form.
+
+
+------------------------------------------------------------
+DOBRE RADY I PROBLEMY
+------------------------------------------------------------
+- Nie kasuj plików „….pdf.partie.json” obok PDF-ów – w nich program
+  pamięta opis partii. Bez nich trzeba by opisywać utwór od nowa.
+- Automatyczne rozpoznawanie najsłabiej działa przy partiach pisanych
+  odręcznie i przy bardzo małych napisach – tam sprawdzaj dokładniej.
+- „Brak partii” przy wyodrębnianiu = w tym utworze żadna partia nie ma
+  pasującej nazwy. Sprawdź listę po prawej i popraw nazwę.
+- Dziennik programu (przydatny przy zgłaszaniu problemów):
+  Win+R → wpisz %LOCALAPPDATA%\Partytury → plik partytury.log
