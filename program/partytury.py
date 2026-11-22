@@ -16,6 +16,12 @@ import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from tkinter import font as tkfont
+
+try:                                    # motyw w stylu Windows 11
+    import sv_ttk
+except Exception:
+    sv_ttk = None
 
 from PIL import ImageTk
 
@@ -23,23 +29,71 @@ import partytury_core as core
 
 APP_NAME = "PartiMaster"
 APP_AUTHOR = "Marek Kubisiak"
-APP_VERSION = "1.2"
+APP_VERSION = "1.3"
 APP_TITLE = f"{APP_NAME} – {APP_AUTHOR}"
 
 THUMB_SCALE = 0.25
 THUMB_W = 150
 COLS = 5
 
-COL_START = "#1a7f37"
-COL_CONT = "#555555"
-COL_EXCL = "#c62828"
-COL_DUP = "#e67e00"
-COL_SEL = "#1565c0"
+# kolory w stylu Windows 11
+COL_START = "#0f7b0f"     # zielony (sukces)
+COL_CONT = "#5c5c5c"      # szary tekst
+COL_EXCL = "#c42b1c"      # czerwony (błąd)
+COL_DUP = "#b35900"       # pomarańczowy (uwaga)
+COL_SEL = "#005fb8"       # niebieski akcent Windows 11
+BG = "#f3f3f3"            # tło obszaru miniatur
+CARD = "#ffffff"
+LINE = "#e0e0e0"
+FONT = "Segoe UI"         # zmieniane na Segoe UI Variable, jeśli jest w systemie
+ACCENT = "TButton"        # styl przycisków głównych (Accent.TButton z motywem)
+
+
+def apply_win11_look(root):
+    """Motyw Sun Valley (wygląd Windows 11) + czcionka Segoe UI Variable."""
+    global FONT, ACCENT
+    try:
+        fams = set(tkfont.families(root))
+    except Exception:
+        fams = set()
+    if "Segoe UI Variable Text" in fams:
+        FONT = "Segoe UI Variable Text"
+    if sv_ttk is not None:
+        try:
+            sv_ttk.set_theme("light")
+            ACCENT = "Accent.TButton"
+        except Exception:
+            pass
+    for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
+        try:
+            tkfont.nametofont(name).configure(family=FONT, size=10)
+        except Exception:
+            pass
+    try:
+        root.configure(background=ttk.Style(root).lookup("TFrame", "background") or BG)
+    except Exception:
+        pass
+    _dwm_round_corners(root)
+
+
+def _dwm_round_corners(root):
+    """Windows 11: zaokrąglone rogi okna (na starszych Windows bez efektu)."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        val = ctypes.c_int(2)      # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(val), ctypes.sizeof(val))
+    except Exception:
+        pass
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        apply_win11_look(self)
         self.title(APP_TITLE)
         self.geometry("1350x880")
         ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "partytury.ico")
@@ -68,14 +122,15 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------- UI
     def _build_ui(self):
-        top = ttk.Frame(self, padding=6)
+        top = ttk.Frame(self, padding=(10, 8))
         top.pack(fill="x")
         ttk.Button(top, text="📂 Otwórz PDF…", command=self.ask_open).pack(side="left")
         self.b_save = ttk.Button(top, text="💾 Zapisz uporządkowany PDF…", command=self.save_ordered)
         self.b_save.pack(side="left", padx=4)
         self.b_extract = ttk.Button(top, text="✂ Wyodrębnij partię…", command=self.extract_one)
         self.b_extract.pack(side="left", padx=4)
-        self.b_auto = ttk.Button(top, text="🔍 Rozpoznaj partie automatycznie", command=self.auto_recognize)
+        self.b_auto = ttk.Button(top, text="🔍 Rozpoznaj partie automatycznie", command=self.auto_recognize,
+                                 style=ACCENT)
         self.b_auto.pack(side="left", padx=4)
         ttk.Separator(top, orient="vertical").pack(side="left", fill="y", padx=8)
         ttk.Button(top, text="📚 Wiele plików: uporządkuj…", command=lambda: self.batch("order")).pack(side="left", padx=4)
@@ -87,15 +142,15 @@ class App(tk.Tk):
 
         # lewa strona: miniatury
         left = ttk.Frame(body)
-        self.canvas = tk.Canvas(left, background="#e8e8e8", highlightthickness=0)
+        self.canvas = tk.Canvas(left, background=BG, highlightthickness=0)
         sb = ttk.Scrollbar(left, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
         self.canvas.pack(side="left", fill="both", expand=True)
-        self.grid_frame = tk.Frame(self.canvas, background="#e8e8e8")
+        self.grid_frame = tk.Frame(self.canvas, background=BG)
         self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
-        self.hint = tk.Label(self.grid_frame, text="", background="#e8e8e8", foreground="#555555",
-                             font=("Segoe UI", 16), padx=60, pady=120, justify="center")
+        self.hint = tk.Label(self.grid_frame, text="", background=BG, foreground=COL_CONT,
+                             font=(FONT, 16), padx=60, pady=120, justify="center")
         self.hint.pack()
         self.grid_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind_all("<MouseWheel>", self._wheel)
@@ -106,20 +161,21 @@ class App(tk.Tk):
         # prawa strona: podgląd + sterowanie
         right = ttk.Frame(body, padding=8)
         body.add(right, weight=2)
-        self.info = ttk.Label(right, text="Otwórz plik PDF z partiami.", font=("Segoe UI", 11, "bold"), wraplength=480)
+        self.info = ttk.Label(right, text="Otwórz plik PDF z partiami.", font=(FONT, 11, "bold"), wraplength=480)
         self.info.pack(anchor="w")
-        self.preview = tk.Label(right, background="white", relief="solid", bd=1)
+        self.preview = tk.Label(right, background=CARD, relief="flat", bd=0,
+                                highlightthickness=1, highlightbackground=LINE)
         self.preview.pack(fill="x", pady=6)
 
         box = ttk.LabelFrame(right, text="Zaznaczona strona", padding=8)
         box.pack(fill="x", pady=4)
         ttk.Label(box, text="Nazwa partii zaczynającej się na tej stronie:").grid(row=0, column=0, columnspan=3, sticky="w")
         self.name_var = tk.StringVar()
-        self.combo = ttk.Combobox(box, textvariable=self.name_var, values=core.PART_NAMES, width=30, font=("Segoe UI", 11))
+        self.combo = ttk.Combobox(box, textvariable=self.name_var, values=core.PART_NAMES, width=30, font=(FONT, 11))
         self.combo.grid(row=1, column=0, sticky="we", pady=4)
         self.combo.bind("<Return>", lambda e: self.set_start())
         self.combo.bind("<<ComboboxSelected>>", lambda e: self.set_start())
-        self.b_start = ttk.Button(box, text="✔ Początek partii (Enter)", command=self.set_start)
+        self.b_start = ttk.Button(box, text="✔ Początek partii (Enter)", command=self.set_start, style=ACCENT)
         self.b_start.grid(row=1, column=1, padx=4)
         self.b_cont = ttk.Button(box, text="↳ To ciąg dalszy", command=self.clear_start)
         self.b_cont.grid(row=2, column=1, padx=4, sticky="we")
@@ -136,14 +192,18 @@ class App(tk.Tk):
 
         box3 = ttk.LabelFrame(right, text="Kolejność po uporządkowaniu", padding=8)
         box3.pack(fill="both", expand=True, pady=4)
-        self.order_list = tk.Listbox(box3, font=("Segoe UI", 10), activestyle="none")
+        self.order_list = tk.Listbox(box3, font=(FONT, 10), activestyle="none", relief="flat", bd=0,
+                                     background=CARD, foreground="#1a1a1a", selectbackground=COL_SEL,
+                                     selectforeground="white", highlightthickness=1,
+                                     highlightbackground=LINE, highlightcolor=COL_SEL)
         self.order_list.pack(fill="both", expand=True)
         self.order_list.bind("<<ListboxSelect>>", self._jump_from_list)
         self.warn = ttk.Label(right, text="", foreground=COL_EXCL, wraplength=480)
         self.warn.pack(anchor="w")
 
-        self.status = ttk.Label(self, text="", relief="sunken", anchor="w", padding=(6, 2))
+        self.status = ttk.Label(self, text="", anchor="w", padding=(10, 4), foreground=COL_CONT)
         self.status.pack(fill="x", side="bottom")
+        ttk.Separator(self, orient="horizontal").pack(fill="x", side="bottom")
 
         for key, d in (("<Left>", -1), ("<Right>", 1), ("<Up>", -COLS), ("<Down>", COLS)):
             self.bind(key, lambda e, d=d: self._move(d, e))
@@ -294,12 +354,12 @@ class App(tk.Tk):
         self.sel = None
         self.title(f"{APP_TITLE}   |   {os.path.basename(path)}")
         for p in range(1, self.proj.n + 1):
-            cell = tk.Frame(self.grid_frame, background="#e8e8e8", bd=3, relief="flat", cursor="hand2")
+            cell = tk.Frame(self.grid_frame, background=BG, bd=3, relief="flat", cursor="hand2")
             cell.grid(row=(p - 1) // COLS, column=(p - 1) % COLS, padx=4, pady=4, sticky="n")
-            img = tk.Label(cell, text=f"str. {p}", width=20, height=10, background="white")
+            img = tk.Label(cell, text=f"str. {p}", width=20, height=10, background=CARD, foreground=COL_CONT)
             img.pack()
-            cap = tk.Label(cell, text="", width=22, anchor="w", justify="left", background="#e8e8e8",
-                           font=("Segoe UI", 9), wraplength=THUMB_W + 10)
+            cap = tk.Label(cell, text="", width=22, anchor="w", justify="left", background=BG,
+                           font=(FONT, 9), wraplength=THUMB_W + 10)
             cap.pack(fill="x")
             for w in (cell, img, cap):
                 w.bind("<Button-1>", lambda e, p=p: self.select(p))
@@ -495,8 +555,8 @@ class App(tk.Tk):
                 txt += f"\n⚠ kopia str. {self.proj.dups[p]}"
                 col = COL_DUP
             cap.configure(text=txt, foreground=col,
-                          font=("Segoe UI", 9, "bold" if is_start or p in self.proj.excluded else "normal"))
-            border = COL_SEL if p == self.sel else (COL_EXCL if p in self.proj.excluded else "#e8e8e8")
+                          font=(FONT, 9, "bold" if is_start or p in self.proj.excluded else "normal"))
+            border = COL_SEL if p == self.sel else (COL_EXCL if p in self.proj.excluded else BG)
             cell.configure(background=border)
 
     def _jump_from_list(self, e):
@@ -723,10 +783,19 @@ def natural_key(path):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
 
+def _bg(win):
+    """Tło okienka takie samo jak tło motywu."""
+    try:
+        win.configure(background=ttk.Style(win).lookup("TFrame", "background") or CARD)
+    except Exception:
+        pass
+
+
 def ask_part(parent, title):
     """Okienko wyboru partii: kategoria z listy albo dowolny tekst."""
     win = tk.Toplevel(parent)
     win.title(title)
+    _bg(win)
     win.transient(parent)
     win.grab_set()
     ttk.Label(win, text="Wybierz grupę z listy albo wpisz nazwę partii po polsku lub angielsku, "
@@ -734,14 +803,14 @@ def ask_part(parent, title):
                         "„Klarnet basowy”, „Bone 3”:",
               padding=10, wraplength=380).pack()
     var = tk.StringVar(value=list(core.CATEGORIES)[0])
-    cb = ttk.Combobox(win, textvariable=var, values=list(core.CATEGORIES), width=32, font=("Segoe UI", 11))
+    cb = ttk.Combobox(win, textvariable=var, values=list(core.CATEGORIES), width=32, font=(FONT, 11))
     cb.pack(padx=10)
     res = {"v": None}
 
     def ok(e=None):
         res["v"] = var.get().strip() or None
         win.destroy()
-    ttk.Button(win, text="OK", command=ok).pack(pady=10)
+    ttk.Button(win, text="OK", command=ok, style=ACCENT, width=12).pack(pady=12)
     cb.bind("<Return>", ok)
     cb.focus_set()
     win.geometry(f"+{parent.winfo_rootx() + 200}+{parent.winfo_rooty() + 150}")
@@ -752,7 +821,9 @@ def ask_part(parent, title):
 def show_report(parent, title, text):
     win = tk.Toplevel(parent)
     win.title(title)
-    t = tk.Text(win, width=100, height=min(30, text.count("\n") + 3), font=("Segoe UI", 10))
+    _bg(win)
+    t = tk.Text(win, width=100, height=min(30, text.count("\n") + 3), font=(FONT, 10), relief="flat",
+                bd=0, padx=10, pady=8, background=CARD, highlightthickness=1, highlightbackground=LINE)
     t.insert("1.0", text)
     t.configure(state="disabled")
     t.pack(padx=8, pady=8)
