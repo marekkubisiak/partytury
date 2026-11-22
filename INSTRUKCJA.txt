@@ -102,6 +102,10 @@ PRZYCISKI NA GÓRNYM PASKU
 [Pomoc]
    Krótka ściągawka, numer wersji i autor programu.
 
+[🌙 Ciemny] / [☀ Jasny]
+   Przełącza wygląd okna: ciemny albo jasny (jak w Windows 11).
+   Program zapamiętuje wybór – przy następnym uruchomieniu będzie tak samo.
+
 
 ------------------------------------------------------------
 RAMKA „ZAZNACZONA STRONA” (po prawej)
