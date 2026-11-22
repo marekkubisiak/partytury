@@ -110,7 +110,7 @@ jobs:
         run: |
           set -e
           P=dist/PartiMaster.app/Contents/Info.plist
-          plutil -replace CFBundleShortVersionString -string "1.4" "$P"
+          plutil -replace CFBundleShortVersionString -string "1.5" "$P"
           plutil -replace CFBundleDisplayName -string "PartiMaster" "$P"
           plutil -replace NSHumanReadableCopyright -string "PartiMaster - Marek Kubisiak" "$P"
           plutil -replace CFBundleDocumentTypes -json '[{"CFBundleTypeName":"PDF","CFBundleTypeRole":"Viewer","LSHandlerRank":"Alternate","LSItemContentTypes":["com.adobe.pdf"]}]' "$P"
@@ -160,7 +160,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la pliki
-          tag="v1.4.${{ github.run_number }}"
+          tag="v1.5.${{ github.run_number }}"
           gh release create "$tag" pliki/PartiMaster-setup.exe pliki/PartiMaster-Mac.dmg \
             --repo "${{ github.repository }}" --target "${{ github.sha }}" \
             --title "PartiMaster $tag - Marek Kubisiak" \
