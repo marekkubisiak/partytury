@@ -10,7 +10,7 @@ Oryginalne pliki PDF nigdy nie są zmieniane – program zawsze zapisuje nowe.
 
 
 ------------------------------------------------------------
-INSTALACJA I AKTUALIZACJA
+INSTALACJA I AKTUALIZACJA – WINDOWS
 ------------------------------------------------------------
 1. Pobierz instalator (zawsze najnowsza wersja):
    https://github.com/marekkubisiak/partytury/releases/latest
@@ -24,6 +24,28 @@ Wersja PartiMaster sama usuwa wcześniejszy program „Partytury” i jego skró
 
 
 ------------------------------------------------------------
+INSTALACJA I AKTUALIZACJA – MAC (procesor Apple: M1, M2, M3, M4…)
+------------------------------------------------------------
+1. Pobierz plik „PartiMaster-Mac.dmg” z tej samej strony:
+   https://github.com/marekkubisiak/partytury/releases/latest
+2. Kliknij go dwa razy. W okienku przeciągnij ikonę PartiMaster
+   na folder „Aplikacje”.
+3. Pierwsze uruchomienie: program nie jest podpisany płatnym kontem
+   Apple, więc Mac go zablokuje. Wtedy:
+   – otwórz Ustawienia systemowe → Prywatność i ochrona,
+   – przewiń w dół, przy komunikacie o PartiMaster kliknij
+     „Otwórz mimo to” i potwierdź hasłem / Touch ID.
+   (Na starszych macOS wystarczy: prawy przycisk na ikonie → „Otwórz”.)
+   Później program uruchamia się normalnie.
+Jeśli mimo to się nie otwiera: Terminal → wpisz
+   xattr -cr /Applications/PartiMaster.app
+   i naciśnij Enter, potem uruchom program jeszcze raz.
+Aktualizacja: pobierz nowy .dmg i przeciągnij program do „Aplikacje”
+– „Zastąp”.
+Na Macu klawisz „Delete” z tej instrukcji to klawisz ⌫ (delete).
+
+
+------------------------------------------------------------
 JAK OTWORZYĆ PDF
 ------------------------------------------------------------
 Dowolny z tych sposobów:
@@ -31,6 +53,8 @@ Dowolny z tych sposobów:
 - upuść plik PDF na ikonę „PartiMaster” na pulpicie,
 - prawy przycisk myszy na PDF → „Otwórz za pomocą” → PartiMaster,
 - przycisk „Otwórz PDF…” w programie.
+Na Macu: przeciągnij PDF na okno albo na ikonę PartiMaster w Docku,
+albo w Finderze: prawy przycisk na PDF → „Otwórz za pomocą” → PartiMaster.
 
 
 ------------------------------------------------------------
@@ -203,3 +227,4 @@ DOBRE RADY I PROBLEMY
   pasującej nazwy. Sprawdź listę po prawej i popraw nazwę.
 - Dziennik programu (przydatny przy zgłaszaniu problemów):
   Win+R → wpisz %LOCALAPPDATA%\Partytury → plik partytury.log
+  Mac: Finder → Idź → Idź do folderu… → ~/Library/Application Support/Partytury
