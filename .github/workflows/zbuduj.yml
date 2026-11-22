@@ -29,7 +29,7 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --windowed --name PartiMaster
           --icon program/partytury.ico --add-data "program/partytury.ico;."
-          --collect-all pypdfium2 --collect-all pypdfium2_raw --collect-all tkinterdnd2
+          --collect-all pypdfium2 --collect-all pypdfium2_raw --collect-all tkinterdnd2 --collect-all sv_ttk
           program/partytury.py
 
       - name: Dolacz Tesseract OCR
@@ -66,5 +66,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.2.${{ github.run_number }}"
+          $tag = "v1.3.${{ github.run_number }}"
           gh release create $tag Output/PartiMaster-setup.exe --title "PartiMaster $tag - Marek Kubisiak" --notes "Instalator programu PartiMaster (autor: Marek Kubisiak). Pobierz PartiMaster-setup.exe i uruchom."
