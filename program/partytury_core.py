@@ -295,7 +295,7 @@ _OCR_RULES = [
     (r"trombone|tromb0ne|\btbn\b|\btb\b(?=\s*\d)|\bbone\b(?=\s*\d)|puzon", 45),
     (r"\btuba\b", 50),
     (r"kontrabas|contrabass|double\s*bass|\bebass\b|\bel\.?\s*bass\b|\bbass\b(?!\s*(trombone|tbn|bone|clarinet))|\bbas\b", 64),
-    (r"\bdrums?\b|\bdrumset\b|perkusja|\bdrum\s*set", 66),
+    (r"\bdrums?\b|\bdrumset\b|perkusja|\bdrum\s*set|\b[o0d]r[uvl]{1,2}ms\b", 66),
     (r"percussion|\bperc\b|\bbells\b|triangle|glockenspiel|vibraphone|dzwonki", 68),
     (r"violoncello|\bcello\b|\bvcl\b|\bvc\b", 76),
     (r"\bviola\b|\bvla\b|altówka", 74),
@@ -457,22 +457,76 @@ def recognize_texts(head_text, side_text, pdf_path):
 UNKNOWN = "?"
 
 
+_GROUPS = ("Alto Sax", "Tenor Sax", "Trumpet", "Trombone", "Violin")
+
+
+def _split(name):
+    m = re.match(r"(.*?)\s+([1-4])$", name or "")
+    return (m.group(1), int(m.group(2))) if m else (name or "", 0)
+
+
+def _fix_numbers(starts):
+    """Numeracja w grupach (np. trąbki 1-4): OCR myli cyfry (1->7/4/L, 3->5/$),
+    więc kolejne partie tej samej grupy dostają spójne numery 1, 2, 3, 4."""
+    items = sorted(starts.items())
+    i = 0
+    while i < len(items):
+        base, _ = _split(items[i][1])
+        j = i
+        while j + 1 < len(items) and _split(items[j + 1][1])[0] == base:
+            j += 1
+        k = j - i + 1
+        if base in _GROUPS and 2 <= k <= 4:
+            nums = [_split(items[t][1])[1] for t in range(i, j + 1)]
+            # spróbuj tylko uzupełnić brakujące numery, zachowując odczytane
+            filled, prev, ok = [], 0, True
+            for idx, n in enumerate(nums):
+                if n == 0:
+                    n = prev + 1
+                left = k - idx - 1
+                if n <= prev or n + left > 4:
+                    ok = False
+                    break
+                filled.append(n)
+                prev = n
+            if not ok:
+                filled = list(range(1, k + 1))
+            for t, n in zip(range(i, j + 1), filled):
+                starts[items[t][0]] = f"{base} {n}"
+        i = j + 1
+
+
 def guess_starts(pages):
     """pages: {strona: (rozpoznana nazwa albo None, czy strona tytułowa, czy partytura)}.
-    Zwraca {strona: nazwa} początków partii. Nierozpoznana partia dostaje nazwę '?'."""
-    starts, cur = {}, None
+    Zwraca {strona: nazwa} początków partii. Nierozpoznana partia dostaje nazwę '?'.
+    Nowa partia zaczyna się na stronie tytułowej; nazwa odczytana na dalszych stronach
+    tylko uzupełnia/poprawia nazwę bieżącej partii."""
+    starts, cur_p, cur = {}, None, None
     for p in sorted(pages):
         name, title, score = pages[p]
         if score:
             if cur != "Partytura":
                 starts[p] = cur = "Partytura"
+                cur_p = p
             continue
-        base = lambda n: re.sub(r"\s*\d$", "", n or "")
-        if name and name != cur and (title or base(name) != base(cur)):
-            starts[p] = cur = name
-        elif title and (name is None or (name == cur and not re.search(r"\d$", name))):
-            starts[p] = name or UNKNOWN
-            cur = name or UNKNOWN + str(p)
+        cb, cn = _split(cur)
+        nb, nn = _split(name)
+        if title and not (name and name == cur and nn):
+            starts[p] = cur = name or UNKNOWN
+            cur_p = p
+            continue
+        if not name:
+            continue                                   # ciąg dalszy bieżącej partii
+        if cur is None or cur == "Partytura" and nb != "Partytura":
+            starts[p] = cur = name                     # pierwsza partia w pliku bez tytułu
+            cur_p = p
+        elif cur == UNKNOWN:
+            starts[cur_p] = cur = name                 # uzupełnij nazwę ze strony 2.
+        elif nb != cb:
+            starts[p] = cur = name                     # inny instrument bez strony tytułowej
+            cur_p = p
+        elif nn and not cn:
+            starts[cur_p] = cur = name                 # dopisz numer (np. Trumpet -> Trumpet 2)
     # nierozpoznane partie zaraz po "Trumpet 1" itp. -> Trumpet 2, 3, 4
     items = sorted(starts.items())
     for i, (p, n) in enumerate(items):
@@ -486,21 +540,8 @@ def guess_starts(pages):
             starts[items[j][0]] = f"{m.group(1)} {k}"
             items[j] = (items[j][0], starts[items[j][0]])
             j += 1
-    # numeracja: kolejne partie tej samej grupy bez numeru -> 1, 2, 3, 4
-    items = sorted(starts.items())
-    i = 0
-    while i < len(items):
-        p, n = items[i]
-        j = i
-        if n in ("Alto Sax", "Tenor Sax", "Trumpet", "Trombone", "Violin"):
-            while j + 1 < len(items) and items[j + 1][1] == n:
-                j += 1
-            if 1 <= j - i <= 3:
-                for k in range(i, j + 1):
-                    starts[items[k][0]] = f"{n} {k - i + 1}"
-        i = j + 1
+    _fix_numbers(starts)
     return starts
-
 
 def analyze_page_texts(header_text, side_text, title_words_list):
     """Łączy odczyt nagłówka i lewego marginesu -> (nazwa, strona tytułowa?, partytura?)."""
