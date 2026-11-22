@@ -29,7 +29,7 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --windowed --name Partytury
           --icon program/partytury.ico --add-data "program/partytury.ico;."
-          --collect-all pypdfium2 --collect-all pypdfium2_raw
+          --collect-all pypdfium2 --collect-all pypdfium2_raw --collect-all tkinterdnd2
           program/partytury.py
 
       - name: Dolacz Tesseract OCR
@@ -66,5 +66,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.0.${{ github.run_number }}"
+          $tag = "v1.1.${{ github.run_number }}"
           gh release create $tag Output/Partytury-setup.exe --title "Partytury $tag" --notes "Instalator programu Partytury. Pobierz Partytury-setup.exe i uruchom."
