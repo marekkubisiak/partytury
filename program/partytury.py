@@ -1,4 +1,4 @@
-"""Porządkowanie partytur - program z oknem (Windows/Mac/Linux).
+"""PartiMaster – Marek Kubisiak. Porządkowanie partii i partytur w PDF.
 
 Jak używać:
  1. Otwórz PDF.
@@ -21,6 +21,11 @@ from PIL import ImageTk
 
 import partytury_core as core
 
+APP_NAME = "PartiMaster"
+APP_AUTHOR = "Marek Kubisiak"
+APP_VERSION = "1.2"
+APP_TITLE = f"{APP_NAME} – {APP_AUTHOR}"
+
 THUMB_SCALE = 0.25
 THUMB_W = 150
 COLS = 5
@@ -35,7 +40,7 @@ COL_SEL = "#1565c0"
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Porządkowanie partytur")
+        self.title(APP_TITLE)
         self.geometry("1350x880")
         ico = os.path.join(os.path.dirname(os.path.abspath(__file__)), "partytury.ico")
         if os.name == "nt" and os.path.exists(ico):
@@ -287,7 +292,7 @@ class App(tk.Tk):
             w.destroy()
         self.cells, self.thumb_imgs, self.small = {}, {}, {}
         self.sel = None
-        self.title(f"Porządkowanie partytur – {os.path.basename(path)}")
+        self.title(f"{APP_TITLE}   |   {os.path.basename(path)}")
         for p in range(1, self.proj.n + 1):
             cell = tk.Frame(self.grid_frame, background="#e8e8e8", bd=3, relief="flat", cursor="hand2")
             cell.grid(row=(p - 1) // COLS, column=(p - 1) % COLS, padx=4, pady=4, sticky="n")
@@ -680,7 +685,8 @@ class App(tk.Tk):
         show_report(self, "Raport", "\n".join(report))
 
     def help(self):
-        messagebox.showinfo("Pomoc", __doc__)
+        messagebox.showinfo(f"Pomoc – {APP_NAME}",
+                            f"{APP_NAME} {APP_VERSION}\nAutor: {APP_AUTHOR}\n\n" + __doc__.split("\n", 1)[1])
 
 
 def file_label(q):
