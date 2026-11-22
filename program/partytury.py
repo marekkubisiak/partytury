@@ -54,9 +54,10 @@ class App(tk.Tk):
         self._ocr_running = False
         self._order = []
         self.drop_ok = False
+        self._drop_procs = []
         self._build_ui()
         self._set_buttons()
-        self._enable_drop()
+        self.after(400, self._enable_drop)     # dopiero gdy okno jest już na ekranie
         if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
             self.open_pdf(sys.argv[1])
 
@@ -145,31 +146,113 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------- przeciąganie plików
     def _enable_drop(self):
-        """Przeciąganie PDF-ów na okno (biblioteka tkinterdnd2). Bez niej program działa normalnie."""
+        """Przeciąganie PDF-ów na okno. W Windows: bezpośrednio przez system (WM_DROPFILES),
+        w razie problemu: biblioteka tkinterdnd2. Bez obu program działa normalnie."""
+        errors = []
+        if os.name == "nt":
+            try:
+                self._win_drop_hook()
+                self.drop_ok = True
+            except Exception as ex:
+                errors.append(f"Windows: {ex!r}")
+        if not self.drop_ok:
+            try:
+                from tkinterdnd2 import TkinterDnD, DND_FILES
+                TkinterDnD._require(self)
+                for w in (self, self.canvas, self.grid_frame, self.preview, self.hint):
+                    w.drop_target_register(DND_FILES)
+                    w.dnd_bind("<<Drop>>", self._on_tkdnd_drop)
+                self.drop_ok = True
+            except Exception as ex:
+                errors.append(f"tkinterdnd2: {ex!r}")
+        log("Przeciąganie: " + ("włączone" if self.drop_ok else "NIEDOSTĘPNE") +
+            ("" if not errors else "  (" + "; ".join(errors) + ")"))
         try:
-            from tkinterdnd2 import TkinterDnD, DND_FILES
-            TkinterDnD._require(self)
-            for w in (self, self.canvas, self.grid_frame, self.preview, self.hint):
-                w.drop_target_register(DND_FILES)
-                w.dnd_bind("<<Drop>>", self._on_drop)
-            self.drop_ok = True
-        except Exception as ex:
-            self.drop_ok = False
-            print("Przeciąganie niedostępne:", ex)
-        self.hint.configure(text=("Przeciągnij tutaj plik PDF\nalbo kliknij „Otwórz PDF…”"
-                                  if self.drop_ok else "Kliknij „Otwórz PDF…”, żeby zacząć."))
+            if not self.proj:
+                self.hint.configure(text=("Przeciągnij tutaj plik PDF\nalbo kliknij „Otwórz PDF…”"
+                                          if self.drop_ok else "Kliknij „Otwórz PDF…”, żeby zacząć."))
+        except Exception:
+            pass
 
-    def _on_drop(self, event):
-        files = [f for f in self.tk.splitlist(event.data) if f.lower().endswith(".pdf")]
-        if not files:
-            messagebox.showinfo("Przeciąganie", "To nie jest plik PDF.")
-            return event.action
-        self.open_pdf(files[0])
-        if len(files) > 1:
-            messagebox.showinfo("Przeciąganie",
-                                f"Otwarto pierwszy z {len(files)} plików: {os.path.basename(files[0])}.\n"
-                                "Żeby pracować na wielu plikach naraz, użyj przycisków „Wiele plików…”.")
+    def _win_drop_hook(self):
+        """Przyjmowanie plików upuszczonych z Eksploratora Windows (jak w Notatniku)."""
+        import ctypes
+        from ctypes import wintypes
+        user32, shell32 = ctypes.windll.user32, ctypes.windll.shell32
+        LRESULT = ctypes.c_ssize_t
+        WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+        user32.GetParent.restype = wintypes.HWND
+        user32.GetParent.argtypes = [wintypes.HWND]
+        user32.CallWindowProcW.restype = LRESULT
+        user32.CallWindowProcW.argtypes = [ctypes.c_void_p, wintypes.HWND, wintypes.UINT,
+                                           wintypes.WPARAM, wintypes.LPARAM]
+        set_proc = getattr(user32, "SetWindowLongPtrW", None) or user32.SetWindowLongW
+        set_proc.restype = ctypes.c_void_p
+        set_proc.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+        shell32.DragQueryFileW.restype = wintypes.UINT
+        shell32.DragQueryFileW.argtypes = [ctypes.c_void_p, wintypes.UINT, wintypes.LPWSTR, wintypes.UINT]
+        shell32.DragFinish.argtypes = [ctypes.c_void_p]
+        shell32.DragAcceptFiles.argtypes = [wintypes.HWND, wintypes.BOOL]
+        WM_DROPFILES, GWLP_WNDPROC = 0x0233, -4
+        self.update_idletasks()
+        hwnds = []
+        try:
+            hwnds.append(int(self.wm_frame(), 16))       # właściwe okno Windows programu
+        except Exception:
+            pass
+        inner = self.winfo_id()
+        if inner not in hwnds:
+            hwnds.append(inner)
+        self._drop_procs = []
+        for hwnd in hwnds:
+            try:   # zezwól na upuszczanie także przy innych uprawnieniach okna
+                f = user32.ChangeWindowMessageFilterEx
+                f.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.DWORD, ctypes.c_void_p]
+                for m in (WM_DROPFILES, 0x0049, 0x004A):
+                    f(hwnd, m, 1, None)
+            except Exception:
+                pass
+            shell32.DragAcceptFiles(hwnd, True)
+            old = [None]
+
+            def proc(hw, msg, wp, lp, old=old):
+                if msg == WM_DROPFILES:
+                    try:
+                        n = shell32.DragQueryFileW(wp, 0xFFFFFFFF, None, 0)
+                        files = []
+                        for i in range(n):
+                            ln = shell32.DragQueryFileW(wp, i, None, 0)
+                            buf = ctypes.create_unicode_buffer(ln + 1)
+                            shell32.DragQueryFileW(wp, i, buf, ln + 1)
+                            files.append(buf.value)
+                        shell32.DragFinish(wp)
+                        self.after(10, lambda fs=files: self._open_dropped(fs))
+                    except Exception as ex:
+                        log(f"Błąd upuszczania: {ex!r}")
+                    return 0
+                return user32.CallWindowProcW(old[0], hw, msg, wp, lp)
+            cb = WNDPROC(proc)
+            old[0] = set_proc(hwnd, GWLP_WNDPROC, ctypes.cast(cb, ctypes.c_void_p))
+            if old[0]:
+                self._drop_procs.append(cb)      # trzymamy referencję, żeby nie zniknęła
+        if not self._drop_procs:
+            raise OSError("nie udało się podłączyć do okna")
+
+    def _on_tkdnd_drop(self, event):
+        self._open_dropped(list(self.tk.splitlist(event.data)))
         return event.action
+
+    def _open_dropped(self, files):
+        log(f"Upuszczono: {files}")
+        pdfs = [f for f in files if f.lower().endswith(".pdf")]
+        if not pdfs:
+            messagebox.showinfo("Przeciąganie", "To nie jest plik PDF.")
+            return
+        self.open_pdf(pdfs[0])
+        if len(pdfs) > 1:
+            messagebox.showinfo("Przeciąganie",
+                                f"Otwarto pierwszy z {len(pdfs)} plików: {os.path.basename(pdfs[0])}.\n"
+                                "Żeby pracować na wielu plikach naraz, użyj przycisków „Wiele plików…”.")
 
     def _wheel(self, e):
         w = self.winfo_containing(e.x_root, e.y_root)
@@ -215,11 +298,11 @@ class App(tk.Tk):
             cap.pack(fill="x")
             for w in (cell, img, cap):
                 w.bind("<Button-1>", lambda e, p=p: self.select(p))
-                if self.drop_ok:
+                if self.drop_ok and not getattr(self, "_drop_procs", None):
                     try:
                         from tkinterdnd2 import DND_FILES
                         w.drop_target_register(DND_FILES)
-                        w.dnd_bind("<<Drop>>", self._on_drop)
+                        w.dnd_bind("<<Drop>>", self._on_tkdnd_drop)
                     except Exception:
                         pass
             self.cells[p] = (cell, img, cap)
@@ -542,7 +625,7 @@ class App(tk.Tk):
         base = os.path.splitext(os.path.basename(self.proj.path))[0]
         out = filedialog.asksaveasfilename(title="Zapisz partię", defaultextension=".pdf",
                                            initialdir=os.path.dirname(self.proj.path),
-                                           initialfile=f"{base}_{core.safe_name(q.split(' ')[0]).upper()}.pdf",
+                                           initialfile=f"{base}_{file_label(q)}.pdf",
                                            filetypes=[("PDF", "*.pdf")])
         if out:
             n = self.proj.export_matching(q, out)
@@ -581,7 +664,7 @@ class App(tk.Tk):
                 report.append(f"✔ {name}: {pr.n} → {n} str." + (f"  (uwaga, powtórzone: {', '.join(rep)})" if rep else ""))
                 made.append(out)
             else:
-                out = os.path.join(outdir, f"{name}_{core.safe_name(q.split(' ')[0]).upper()}.pdf")
+                out = os.path.join(outdir, f"{name}_{file_label(q)}.pdf")
                 n = pr.export_matching(q, out)
                 if n:
                     parts = [p for p, _ in pr.ordered_parts() if core.matches(p, q)]
@@ -590,7 +673,7 @@ class App(tk.Tk):
                 else:
                     report.append(f"✖ {name}: brak partii „{q}”")
         if made and messagebox.askyesno("Gotowe", f"Utworzono {pl(len(made), 'plik', 'pliki', 'plików')}.\nSpakować je też do pliku ZIP?"):
-            label = "uporzadkowane" if mode == "order" else core.safe_name(q.split(' ')[0])
+            label = "uporzadkowane" if mode == "order" else file_label(q)
             zp = os.path.join(outdir, f"Partie_{label}.zip")
             core.make_zip(made, zp, os.path.splitext(os.path.basename(zp))[0])
             report.append(f"\nZIP: {zp}")
@@ -598,6 +681,25 @@ class App(tk.Tk):
 
     def help(self):
         messagebox.showinfo("Pomoc", __doc__)
+
+
+def file_label(q):
+    """Nazwa partii do nazwy pliku: 'Sax alt 1' -> 'Sax_alt_1', 'Bas / kontrabas' -> 'Bas_kontrabas'."""
+    import re
+    return re.sub(r"[^\w]+", "_", q.strip()).strip("_") or "partia"
+
+
+def log(msg):
+    """Dziennik programu (pomaga ustalić przyczynę problemów): %LOCALAPPDATA%\\Partytury\\partytury.log"""
+    try:
+        import datetime
+        import tempfile
+        d = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "Partytury")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "partytury.log"), "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S}  {msg}\n")
+    except Exception:
+        pass
 
 
 def pl(n, one, few, many):
