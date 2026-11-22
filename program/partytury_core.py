@@ -430,10 +430,13 @@ _ORD_RE = r"(1st|2nd|3rd|4th|1ST|2ND|3RD|4TH|ist|lst|2no|3ro|4rh)"
 def find_tesseract():
     """Ścieżka do tesseract.exe albo None."""
     import sys
-    if getattr(sys, "frozen", False):            # wersja zainstalowana z setup.exe
-        p = os.path.join(os.path.dirname(sys.executable), "tesseract", "tesseract.exe")
-        if os.path.isfile(p):
-            return p
+    if getattr(sys, "frozen", False):            # wersja zainstalowana (Windows setup.exe / Mac .app)
+        here = os.path.dirname(sys.executable)
+        for p in (os.path.join(here, "tesseract", "tesseract.exe"),
+                  os.path.join(here, "tesseract", "tesseract"),
+                  os.path.join(here, "..", "Resources", "tesseract", "tesseract")):
+            if os.path.isfile(p):
+                return os.path.normpath(p)
     p = shutil.which("tesseract")
     if p:
         return p
@@ -456,8 +459,12 @@ def ocr_image(img, tesseract_path, psm=11):
     try:
         img.save(tmp)
         flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
+        env = None
+        td = os.path.join(os.path.dirname(tesseract_path), "tessdata")
+        if os.path.isdir(td):                          # dołączone dane języka (np. w wersji na Maca)
+            env = dict(os.environ, TESSDATA_PREFIX=td)
         r = subprocess.run([tesseract_path, tmp, "stdout", "--psm", str(psm), "-l", "eng"],
-                           capture_output=True, timeout=120, creationflags=flags)
+                           capture_output=True, timeout=120, creationflags=flags, env=env)
         return r.stdout.decode("utf-8", "replace")
     finally:
         try:

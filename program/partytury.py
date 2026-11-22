@@ -27,9 +27,11 @@ from PIL import ImageTk
 
 import partytury_core as core
 
+IS_MAC = sys.platform == "darwin"
+
 APP_NAME = "PartiMaster"
 APP_AUTHOR = "Marek Kubisiak"
-APP_VERSION = "1.3"
+APP_VERSION = "1.4"
 APP_TITLE = f"{APP_NAME} – {APP_AUTHOR}"
 
 THUMB_SCALE = 0.25
@@ -58,10 +60,19 @@ PALETTES = {
 THEME = "light"
 
 
-def _settings_path():
+def app_data_dir():
+    """Folder na ustawienia i dziennik: Windows %LOCALAPPDATA%\\Partytury,
+    Mac ~/Library/Application Support/Partytury."""
     import tempfile
-    d = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "Partytury")
-    return os.path.join(d, "ustawienia.json")
+    if IS_MAC:
+        base = os.path.expanduser("~/Library/Application Support")
+    else:
+        base = os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()
+    return os.path.join(base, "Partytury")
+
+
+def _settings_path():
+    return os.path.join(app_data_dir(), "ustawienia.json")
 
 
 def load_settings():
@@ -106,6 +117,15 @@ def apply_win11_look(root):
         fams = set()
     if "Segoe UI Variable Text" in fams:
         FONT = "Segoe UI Variable Text"
+    if IS_MAC:                                    # Mac: czcionka systemowa, rozmiary jak w Windows
+        try:
+            FONT = tkfont.nametofont("TkDefaultFont").actual()["family"]
+        except Exception:
+            FONT = "Helvetica Neue"
+        try:
+            root.tk.call("tk", "scaling", 1.3333)
+        except Exception:
+            pass
     if sv_ttk is not None:
         try:
             sv_ttk.set_theme("light")
@@ -168,7 +188,10 @@ class App(tk.Tk):
         self._build_ui()
         self.apply_theme()
         self._set_buttons()
-        self.after(400, self._enable_drop)     # dopiero gdy okno jest już na ekranie
+        if IS_MAC:
+            self._enable_drop()                # Mac: od razu, żeby przyjąć plik z Findera przy starcie
+        else:
+            self.after(400, self._enable_drop)     # dopiero gdy okno jest już na ekranie
         if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
             self.open_pdf(sys.argv[1])
 
@@ -262,12 +285,20 @@ class App(tk.Tk):
         for key, d in (("<Left>", -1), ("<Right>", 1), ("<Up>", -COLS), ("<Down>", COLS)):
             self.bind(key, lambda e, d=d: self._move(d, e))
         self.bind("<Delete>", lambda e: self.toggle_excl() if self.focus_get() is not self.combo else None)
+        if IS_MAC:                                # na Macu klawisz „delete” to BackSpace
+            self.bind("<BackSpace>", lambda e: self.toggle_excl() if self.focus_get() is not self.combo else None)
 
     # ------------------------------------------------------------- przeciąganie plików
     def _enable_drop(self):
         """Przeciąganie PDF-ów na okno. W Windows: bezpośrednio przez system (WM_DROPFILES),
         w razie problemu: biblioteka tkinterdnd2. Bez obu program działa normalnie."""
         errors = []
+        if IS_MAC:                     # upuszczenie na ikonę w Docku / „Otwórz za pomocą” w Finderze
+            try:
+                self.createcommand("::tk::mac::OpenDocument",
+                                   lambda *files: self._open_dropped(list(files)))
+            except Exception as ex:
+                errors.append(f"Mac OpenDocument: {ex!r}")
         if os.name == "nt":
             try:
                 self._win_drop_hook()
@@ -379,7 +410,9 @@ class App(tk.Tk):
             if w is self.order_list:
                 return
             w = w.master
-        self.canvas.yview_scroll(int(-e.delta / 40), "units")
+        step = -e.delta if IS_MAC else int(-e.delta / 40)     # Mac: małe wartości delta
+        if step:
+            self.canvas.yview_scroll(step, "units")
 
     def _set_buttons(self):
         st = "normal" if self.proj else "disabled"
@@ -847,8 +880,7 @@ def log(msg):
     """Dziennik programu (pomaga ustalić przyczynę problemów): %LOCALAPPDATA%\\Partytury\\partytury.log"""
     try:
         import datetime
-        import tempfile
-        d = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "Partytury")
+        d = app_data_dir()
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "partytury.log"), "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S}  {msg}\n")
@@ -919,5 +951,32 @@ def show_report(parent, title, text):
     ttk.Button(win, text="Zamknij", command=win.destroy).pack(pady=6)
 
 
+def selftest(out):
+    """Test dla serwera budującego: czy Tesseract jest dołączony i czyta tekst (bez okna)."""
+    lines, ok = [], False
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        tess = core.find_tesseract()
+        lines.append(f"tesseract: {tess}")
+        img = Image.new("RGB", (900, 200), "white")
+        try:
+            fnt = ImageFont.load_default(size=80)
+        except TypeError:
+            fnt = ImageFont.load_default()
+        ImageDraw.Draw(img).text((40, 50), "TRUMPET 1", fill="black", font=fnt)
+        txt = core.ocr_image(img, tess, psm=6) if tess else ""
+        lines.append(f"ocr: {txt.strip()!r}")
+        ok = "TRUMPET" in txt.upper()
+        lines.append(f"sv_ttk: {sv_ttk is not None}")
+    except Exception as ex:
+        lines.append(f"blad: {ex!r}")
+    lines.append("SELFTEST OK" if ok else "SELFTEST FAIL")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--selftest":
+        sys.exit(selftest(sys.argv[2]))
     App().mainloop()
