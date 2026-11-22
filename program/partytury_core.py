@@ -7,75 +7,170 @@ import zipfile
 import pypdf
 import pypdfium2 as pdfium
 
-# Lista podpowiedzi w kolejności partytury (można wpisać dowolną inną nazwę).
+# =====================================================================
+# Baza nazw instrumentów (polskie i angielskie nazwy oraz skróty)
+# Każda nazwa sprowadzana jest do jednej postaci (np. "Sax alt 1", "AS 1",
+# "1st Eb Alto Saxophone", "Saksofon altowy 1" -> "Alto Sax 1").
+# Kolejność wpisów = kolejność sprawdzania (pierwszy pasujący wygrywa).
+# Wzorce są pisane bez polskich znaków (tekst jest do nich sprowadzany).
+# (nazwa, pozycja w partyturze, wzorzec)
+# =====================================================================
+INSTRUMENTS = [
+    ("Okładka",          0,    r"oklad|\bcover\b|\bobsada\b|instrumentation"),
+    ("Partytura",        1,    r"partytur|\bscore\b|conductor|dyrygent|\bfull\s*sc|\bcond\b"),
+    # bas elektryczny zanim gitara ("bass guitar", "gitara basowa")
+    ("Bass",             64,   r"bass\s*guitar|gitara\s*basow|electric\s*bass|\bebass\b|\be\.?\s*bass\b|"
+                               r"\bel\.?\s*bass\b|bas\s*elektr|\bbas\s*el\b|\bb\.?\s*git\b|\bbgtr\b"),
+    ("Guitar",           60,   r"guitar|gitar|\bgtr\b|\bgit\b|\bgt\b|\bagit\b|\begit\b|\bchit\b|"
+                               r"\b[aej]\.?\s*gtr\b"),
+    ("Piano",            62,   r"piano|fortepian|pianin|\bpno\b|\bpf\b|\bpfte\b|keyboard|\bkeys?\b|\bkbd\b|"
+                               r"klawisz|klawiatur|rhodes|wurlitzer|celest|\bcel\b|apiano"),
+    ("Organ",            62.5, r"\borgan|\borgany\b|hammond|\borg\b"),
+    ("Synthesizer",      62.7, r"synth|syntezator"),
+    ("Accordion",        63,   r"accord|akordeon|\bacc\b"),
+    ("Vocal",            10,   r"\bvoc|\bvoice|\bvox\b|wokal|\bspiew|\bglos\b|\blyrics?\b|\btekst\b|"
+                               r"\bchoir\b|\bchor\b|\bchorus\b|\bvce\b|singer"),
+    ("Bass Clarinet",    23,   r"bass\s*clar|klarnet\s*basow|\bb\.?\s*cl\b|\bbcl\b|\bcl\.?\s*b\b|\bclb\b|"
+                               r"bs\.?\s*cl|clarinetto\s*basso|basklarnet"),
+    ("Bass Trombone",    49,   r"bass\s*(trombone|tbn|bone|tb|trb)\b|puzon\s*basow|\bb\.?\s*tbn\b|\bbtbn\b|"
+                               r"\bbtrb\b|\bb\.?\s*bone\b|\btn\.?\s*b\b|\btrb\.?\s*basso|trombone\s*basso|"
+                               r"\btbn\.?\s*basso"),
+    ("Bass Sax",         35,   r"bass\s*sax|saksofon\s*basow"),
+    ("Contrabassoon",    23.7, r"contra\s*bassoon|contrabassoon|kontrafagot|contrafag|\bc\.?-?\s*fg\b|\bcbsn\b|\bcbssn\b"),
+    ("Euphonium",        49.5, r"euphon|eufon|baritone\s*horn|\beuph\b|sakshorn\s*baryton"),
+    ("English Horn",     21.5, r"english\s*horn|cor\s*anglais|\bcora\b|\bc\.?\s*a\b|\be\.?\s*h\b|"
+                               r"eng\.?\s*hn|rozek\s*angiel|corno\s*inglese"),
+    ("Flute",            20,   r"alto\s*flute|flet\s*altow|\bafl\b"),
+    ("Cello",            76,   r"\bcell|violoncel|wiolonczel|\bvc\b|\bvcl\b|\bvlc\b|\bvcs\b"),
+    ("Viola",            74,   r"\bviola\b|\bviole\b|\bvla\b|\bvle\b|\bva\b|altowk|\bvl\b(?!\s*\.?\s*[1-4i])"),
+    ("Violin",           70,   r"violin|skrzyp|\bvln\b|\bvn\b|\bvni\b|\bvl\b|\bvi\b(?=\s*\.?\s*[1-4i])"),
+    ("Clarinet/Alto Sax", 25.5, r"clar\w*\s*/\s*alto|klarnet\s*/\s*alt"),
+    # puzony przed saksofonami ("Tenor Trombone", "puzon tenorowy")
+    ("Trombone",         45,   r"tromb|puzon|\btbn\b|\btb\b|\btrb\b|\bbone\b|\btn\b|\btrbn\b|\bpos\b|posaune|"
+                               r"\btbne\b"),
+    ("Soprano Sax",      24,   r"sopran\w*\s*sax|sax\w*\s*sopran|\bsop\.?\s*sax|\bs\.?\s*sax|\bs\.?\s*sx\b|"
+                               r"\bss\b|\bssx\b|\bsoprano\b|\bsopran\b|\bsop\b"),
+    ("Alto Sax",         26,   r"\balto\b|\balt\b|altow|\bas\b|\basx\b|\ba\.?\s*sax|\ba\.?\s*sx\b|\basax\b"),
+    ("Tenor Sax",        30,   r"\btenor|tenorow|\bten\b|\bts\b|\btsx\b|\bt\.?\s*sax|\bt\.?\s*sx\b|\btsax\b"),
+    ("Baritone Sax",     34,   r"\bbari|barit|baryton|\bbs\b|\bbsx\b|\bb\.?\s*sax|\bb\.?\s*sx\b|\bbsax\b"),
+    ("Saxophone",        28,   r"\bsax|saksofon|\bsx\b"),
+    ("Piccolo",          18,   r"piccolo|pikolo|\bpicc?\b|ottavino"),
+    ("Flute",            20,   r"\bflut|\bflet|\bfl\b|\bflt\b|\bflauto|\bflauti\b"),
+    ("Oboe",             21,   r"\boboe|\boboj|\bob\b|\bobs\b"),
+    ("Clarinet",         22,   r"clar|klarnet|\bcl\b|\bkl\b|\bcls\b|\bclt\b"),
+    ("Bassoon",          23.5, r"bassoon|fagot|\bbsn\b|\bbssn\b|\bfg\b|\bfag\b|\bbn\b"),
+    ("Horn",             38,   r"french\s*horn|\bhorns?\b|waltorni|\bhn\b|\bhns\b|\bhrn\b|\bcor\b|\bcr\b|"
+                               r"\bcorni?\b|\bwalt\b|\brog\b"),
+    ("Flugelhorn",       40.6, r"flugel|flgh|\bflg\b|\bfgh\b|skrzydlowk"),
+    ("Cornet",           40.8, r"cornet|kornet|\bcrnt\b|\bcnt\b"),
+    ("Trumpet",          40,   r"trump|tromp|trabk|\btpt\b|\btpts\b|\btp\b|\btr\b|\btrp\b|\btrpt\b|\btrbe\b|"
+                               r"\btromba\b|\bbb\s*tpt\b"),
+    ("Tuba",             50,   r"\btuba|\btba\b|sousaphon|suzafon"),
+    ("Bass",             64,   r"kontrabas|contrabass|contrabbass|double\s*bass|upright\s*bass|string\s*bass|"
+                               r"acoustic\s*bass|\bd\.?\s*b\b|\bdb\b|\bcb\b|\bkb\b|\bbass\b|\bbas\b|\bbasso\b|"
+                               r"\bbs\b|\ba\.\s*b\.|\bbass\s*\d"),
+    ("Drums",            66,   r"drum|perkusja|zestaw\s*perk|\bdr\b|\bdrs\b|\bdms\b|\bd\.\s*s\.|\bbatt?\b|"
+                               r"\bbatteria\b|schlagzeug|\bperk\b"),
+    ("Timpani",          69.5, r"timpan|\btimp\b|\btmp\b|kotl"),
+    ("Bells",            68.2, r"\bbells?\b|dzwonk|glock|carillon|dzwony"),
+    ("Vibraphone",       68.4, r"vibra|wibraf|\bvib\b|\bvibr\b"),
+    ("Xylophone",        68.5, r"xylo|ksylof|\bxyl\b"),
+    ("Marimba",          68.6, r"marimb|\bmar\b"),
+    ("Percussion",       68,   r"perc|perkusjonal|instr\w*\s*perkus|triang|trojkat|conga|kong|bongo|shaker|"
+                               r"tambour|tamburyn|cabasa|claves|cowbell|\baux\b|guiro|cymbal|talerz"),
+    ("Harp",             69.8, r"\bharp|harfa|\barpa\b|\bhp\b|\bhfe\b"),
+]
+_INSTR = [(n, pos, re.compile(pat)) for n, pos, pat in INSTRUMENTS]
+
+# Lista podpowiedzi w programie (można wpisać dowolną inną nazwę – po polsku lub angielsku)
 PART_NAMES = [
-    "Okładka", "Partytura", "Vocal", "Flute", "Clarinet", "Soprano Sax",
+    "Okładka", "Partytura", "Vocal", "Piccolo", "Flute", "Oboe", "English Horn",
+    "Clarinet", "Bass Clarinet", "Bassoon", "Soprano Sax",
     "Alto Sax 1", "Alto Sax 2", "Tenor Sax 1", "Tenor Sax 2", "Baritone Sax",
-    "Trumpet 1", "Trumpet 2", "Trumpet 3", "Trumpet 4",
-    "Trombone 1", "Trombone 2", "Trombone 3", "Trombone 4", "Bass Trombone", "Tuba",
-    "Guitar", "Piano", "Bass", "Drums", "Percussion", "Bells",
-    "Violin 1", "Violin 2", "Viola", "Cello", "Kontrabas", "Inne",
+    "Horn 1", "Horn 2", "Trumpet 1", "Trumpet 2", "Trumpet 3", "Trumpet 4", "Flugelhorn",
+    "Trombone 1", "Trombone 2", "Trombone 3", "Trombone 4", "Bass Trombone", "Euphonium", "Tuba",
+    "Guitar", "Piano", "Organ", "Synthesizer", "Accordion", "Bass", "Drums",
+    "Percussion", "Bells", "Vibraphone", "Timpani", "Harp",
+    "Violin 1", "Violin 2", "Viola", "Cello", "Inne",
 ]
 
-_ORDINALS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5,
-             "i": 1, "ii": 2, "iii": 3, "iv": 4}
-
-# (wzorzec, pozycja w partyturze) - sprawdzane po kolei, pierwszy pasujący wygrywa
-_RULES = [
-    (r"okład|oklad|cover|okładka", 0),
-    (r"partytur|score|conductor|dyrygent", 1),
-    (r"guit|gitar|\bgtr\b|\bgit\b|agit", 60),
-    (r"piano|fortepian|pno|keyboard|keys|celest|apiano", 62),
-    (r"voc|voice|wokal|śpiew|spiew|tekst|lyrics|chór|chor", 10),
-    (r"\bsolo\b", 12),
-    (r"sopr?an", 24),
-    (r"clar.*alto", 25.5),
-    (r"alto|\balt\b|altowy", 26),
-    (r"tenor|\bten\b", 30),
-    (r"bari|barit|baryton", 34),
-    (r"flut|flet|piccolo|\bfl\b", 20),
-    (r"clar|klarnet|\bcl\b", 22),
-    (r"tr[uą]mp|trąbk|trabk|\btpt?\b|flugel|cornet", 40),
-    (r"bass\s*(trombone|tbn|bone)|puzon\s*basowy|\bb\.?\s*tbn", 49),
-    (r"tromb|\btbn?\b|\bbone\b|puzon", 45),
-    (r"tuba", 50),
-    (r"kontrabas|contrabass|double\s*bass|\bcb\b|ebass|el\.?\s*bass|\bbass\b|\bbas\b|bas\s*elektr", 64),
-    (r"drum|perkusj|\bdr\b|\bdrs\b", 66),
-    (r"perc|bells|dzwon|triang|trójk|trojk|vib|glock|marimb|timp|kotł", 68),
-    (r"cell|vcl|wiolonczel", 76),
-    (r"viola|\bvla\b|altówk|altowk", 74),
-    (r"viol|vln|skrzyp", 70),
-]
-
-# Kategorie do wyodrębniania partii z wielu plików
+# Grupy do wyodrębniania (pozycje z INSTRUMENTS)
 CATEGORIES = {
-    "Bas / kontrabas": 64,
-    "Fortepian": 62,
-    "Gitara": 60,
-    "Perkusja": 66,
-    "Wokal": 10,
-    "Partytura": 1,
-    "Trąbki (wszystkie)": 40,
-    "Puzony (wszystkie)": 45,
+    "Bas / kontrabas": {64},
+    "Fortepian / keyboard": {62, 62.5, 62.7},
+    "Gitara": {60},
+    "Perkusja": {66},
+    "Perkusjonalia (dzwonki, wibrafon...)": {68, 68.2, 68.4, 68.5, 68.6, 69.5},
+    "Wokal": {10},
+    "Partytura": {1},
+    "Saksofony (wszystkie)": {24, 25.5, 26, 28, 30, 34, 35},
+    "Trąbki (wszystkie)": {40, 40.6, 40.8},
+    "Puzony (wszystkie)": {45, 49},
+    "Smyczki (wszystkie)": {70, 74, 76},
 }
+
+_ORDINALS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5, "6th": 6,
+             "ii": 2, "iii": 3, "iv": 4, "v": 5,
+             "pierwszy": 1, "pierwsza": 1, "drugi": 2, "druga": 2, "trzeci": 3, "trzecia": 3,
+             "czwarty": 4, "czwarta": 4, "first": 1, "second": 2, "third": 3, "fourth": 4,
+             "lead": 1}
+_FOLD = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
+
+
+def fold(text):
+    """Małe litery, bez polskich znaków, kropki/ukośniki/myślniki jako spacje wokół."""
+    t = (text or "").translate(_FOLD).lower().replace("♭", "b").replace("♯", "#")
+    return " " + re.sub(r"\s+", " ", t) + " "
 
 
 def _number(name):
-    n = name.lower()
-    for w in re.findall(r"\b\w+\b", n):
-        if w in _ORDINALS and w not in ("i",):
+    n = fold(name)
+    m = re.search(r"(?<![\d.])([1-6])(?![\d])", n)
+    if m:
+        return int(m.group(1))
+    for w in re.findall(r"[a-z0-9]+", n):
+        if w in _ORDINALS:
             return _ORDINALS[w]
-    m = re.search(r"(?<!\d)([1-6])(?!\d)", n)
-    return int(m.group(1)) if m else 0
+    m = re.search(r"\b(i{1,3}|iv)\b(?!\s*sax)", n)        # Tr. I, Cl. II
+    if m and re.search(r"\b(vn|vl|vni|cl|fl|ob|fg|cr|cor|tr|tn|tbn|tpt|hn|sax|kl)\b", n):
+        return {"i": 1, "ii": 2, "iii": 3, "iv": 4}[m.group(1)]
+    return 0
+
+
+def canonical(name):
+    """(nazwa ujednolicona, pozycja w partyturze) albo (None, 90)."""
+    n = fold(name)
+    for canon, pos, rx in _INSTR:
+        if rx.search(n):
+            return canon, pos
+    return None, 90
+
+
+_SPECIFIC = {"Bass Clarinet", "Bass Trombone", "Bass Sax", "Contrabassoon", "English Horn", "Euphonium"}
+
+
+def _hits(name):
+    """Wszystkie instrumenty wymienione w nazwie (np. 'Tenor 1/Flute' -> Tenor Sax, Flute).
+    Dla nazw złożonych typu 'Bass Clarinet' liczy się tylko ten jeden instrument."""
+    main = canonical(name)
+    if main[0] in _SPECIFIC:
+        return {main}
+    n = fold(name)
+    return {(canon, pos) for canon, pos, rx in _INSTR if rx.search(n)}
+
+
+def standard_name(name):
+    """'Sax alt 1' -> 'Alto Sax 1'; nieznana nazwa zostaje bez zmian."""
+    canon, _ = canonical(name)
+    if not canon:
+        return name
+    k = _number(name)
+    return f"{canon} {k}" if k else canon
 
 
 def section(name):
     """Pozycja grupy instrumentów w partyturze (mniejsza = wyżej)."""
-    n = name.lower()
-    for pat, pos in _RULES:
-        if re.search(pat, n):
-            return pos
-    return 90
+    return canonical(name)[1]
 
 
 def order_key(name):
@@ -83,17 +178,27 @@ def order_key(name):
 
 
 def matches(name, query):
-    """Czy partia pasuje do kategorii (z CATEGORIES) lub wpisanego tekstu."""
+    """Czy partia 'name' pasuje do szukanej: grupy z CATEGORIES albo nazwy instrumentu
+    wpisanej po polsku lub angielsku (np. 'Sax alt 1', 'Trąbka 2', 'klarnet basowy')."""
+    hits = _hits(name)
     if query in CATEGORIES:
-        sec = CATEGORIES[query]
-        s = section(name)
-        if sec == 45:
-            return s in (45, 49)
-        if s in (45, 49):          # np. "Bass Trombone" to nie bas
+        poss = CATEGORIES[query]
+        main = canonical(name)[1]
+        if main in (45, 49, 23, 35) and not poss & {45, 49, 23, 35}:
+            return False                       # np. puzon basowy to nie "bas"
+        return any(pos in poss for _, pos in hits)
+    qc, _ = canonical(query)
+    if qc:
+        qn = _number(query)
+        if not any(c == qc for c, _ in hits):
             return False
-        n = name.lower()
-        return s == sec or any(re.search(pat, n) for pat, pos in _RULES if pos == sec)
-    return query.strip().lower() in name.lower()
+        return qn == 0 or _number(name) == qn
+    return fold(query).strip() in fold(name)
+
+
+def same_part(a, b):
+    """Czy dwie nazwy oznaczają tę samą partię (do ostrzeżeń o powtórzeniach)."""
+    return standard_name(a).lower() == standard_name(b).lower()
 
 
 def next_name(name):
@@ -189,7 +294,7 @@ class Project:
         for n, _ in self.parts():
             if n.startswith(UNKNOWN) or n == "(bez nazwy)":
                 continue
-            key = n.strip().lower()
+            key = standard_name(n).strip().lower()
             if key in seen:
                 rep.add(n)
             seen.add(key)
@@ -280,33 +385,45 @@ import tempfile
 # więc pomijamy bardzo krótkie skróty (dr, fl, cl...), które łatwo trafić przypadkiem.
 _OCR_RULES = [
     (r"partytur|\bscore\b|conductor", 1),
+    (r"bass\s*guitar|gitara\s*basow|\bebass\b|\bel\.?\s*bass\b|electric\s*bass", 64),
     (r"guitar|gitar|\bgtr\b|\bagit\b", 60),
-    (r"piano|fortepian|\bpno\b|apiano|keyboard|celest", 62),
+    (r"piano|fortepian|\bpno\b|apiano|keyboard|celest|klawisz", 62),
+    (r"\borgan\b|\borgany\b|hammond", 62.5),
+    (r"accordion|akordeon", 63),
     (r"\bvocal|\bvoice\b|wokal|\bvoc\b", 10),
+    (r"bass\s*clar|klarnet\s*basow", 23),
+    (r"bass\s*(trombone|tbn|bone)|puzon\s*basow", 49),
+    (r"tromb|\btbn\b|\btb\b(?=\s*\d)|\bbone\b(?=\s*\d)|puzon", 45),
     (r"soprano?\s*sax|\bsop\b|sopran", 24),
     (r"clarinet.{0,4}alto", 25.5),
-    (r"\balto\b|alto\s*sax|\bas\b(?=\s*[12])", 26),
-    (r"\btenor\b|\bten\.?\s*sax|\bts\b(?=\s*[12])", 30),
-    (r"\bbari\b|baritone|barytone|bari\.?\s*sax|\bbs\b\s*sax", 34),
-    (r"\bflute\b|\bflet\b|piccolo|\bfl\.?\s*$", 20),
+    (r"\balto\b|alto\s*sax|altowy|sax\w*\s*alt\b|\bas\b(?=\s*[12])", 26),
+    (r"\btenor\b|tenorowy|sax\w*\s*ten\b|\bten\.?\s*sax|\bts\b(?=\s*[12])", 30),
+    (r"\bbari\b|baritone|barytone|barytonowy|bari\.?\s*sax|\bbs\b\s*sax", 34),
+    (r"piccolo", 18),
+    (r"\bflute\b|\bflet\b|\bfl\.?\s*$", 20),
+    (r"\boboe\b|\boboj\b", 21),
     (r"clarinet|klarnet", 22),
-    (r"trumpet|tr[uv]mpet|\btpt\b|\btp\b(?=\s*\d)|trąbk|flugel", 40),
-    (r"bass\s*(trombone|tbn|bone)|puzon\s*basowy", 49),
-    (r"trombone|tromb0ne|\btbn\b|\btb\b(?=\s*\d)|\bbone\b(?=\s*\d)|puzon", 45),
+    (r"bassoon|fagot", 23.5),
+    (r"flugel|skrzydlowk", 40.6),
+    (r"trumpet|tr[uv]mpet|\btpt\b|\btp\b(?=\s*\d)|trabka|trąbka|trabki", 40),
+    (r"french\s*horn|\bhorn\b|waltorni", 38),
+    (r"euphon|eufon", 49.5),
     (r"\btuba\b", 50),
-    (r"kontrabas|contrabass|double\s*bass|\bebass\b|\bel\.?\s*bass\b|\bbass\b(?!\s*(trombone|tbn|bone|clarinet))|\bbas\b", 64),
-    (r"\bdrums?\b|\bdrumset\b|perkusja|\bdrum\s*set|\b[o0d]r[uvl]{1,2}ms\b", 66),
-    (r"percussion|\bperc\b|\bbells\b|triangle|glockenspiel|vibraphone|dzwonki", 68),
-    (r"violoncello|\bcello\b|\bvcl\b|\bvc\b", 76),
-    (r"\bviola\b|\bvla\b|altówka", 74),
+    (r"kontrabas|contrabass|double\s*bass|\bbass\b(?!\s*(trombone|tbn|bone|clarinet))|\bbas\b", 64),
+    (r"\bdrums?\b|\bdrumset\b|perkusja\b|\bdrum\s*set|\b[o0d]r[uvl]{1,2}ms\b", 66),
+    (r"timpani|kotly", 69.5),
+    (r"percussion|\bperc\b|perkusjonal|\bbells\b|triangle|glockenspiel|vibraphone|dzwonki|xylophone|marimba", 68),
+    (r"\bharp\b|harfa", 69.8),
+    (r"violoncello|\bcello\b|\bvcl\b|\bvc\b|wiolonczel", 76),
+    (r"\bviola\b|\bvla\b|altowka|altówka", 74),
     (r"violin|\bvln\b|\bvl\b(?=\s*\d)|skrzypce", 70),
 ]
-_NUMBERED = {26, 30, 40, 45, 70}
-_CANON = {1: "Partytura", 10: "Vocal", 20: "Flute", 22: "Clarinet", 24: "Soprano Sax",
-          25.5: "Clarinet/Alto Sax", 26: "Alto Sax", 30: "Tenor Sax", 34: "Baritone Sax",
-          40: "Trumpet", 45: "Trombone", 49: "Bass Trombone", 50: "Tuba", 60: "Guitar",
-          62: "Piano", 64: "Bass", 66: "Drums", 68: "Percussion", 70: "Violin",
-          74: "Viola", 76: "Cello", 28: "Saxophone"}
+_NUMBERED = {26, 30, 40, 45, 70, 38, 22, 20}
+_CANON = {1: "Partytura", 10: "Vocal", 18: "Piccolo", 20: "Flute", 21: "Oboe", 22: "Clarinet", 23: "Bass Clarinet",
+          23.5: "Bassoon", 24: "Soprano Sax", 25.5: "Clarinet/Alto Sax", 26: "Alto Sax", 30: "Tenor Sax",
+          34: "Baritone Sax", 38: "Horn", 40: "Trumpet", 40.6: "Flugelhorn", 45: "Trombone", 49: "Bass Trombone",
+          49.5: "Euphonium", 50: "Tuba", 60: "Guitar", 62: "Piano", 62.5: "Organ", 63: "Accordion", 64: "Bass",
+          66: "Drums", 68: "Percussion", 69.5: "Timpani", 69.8: "Harp", 70: "Violin", 74: "Viola", 76: "Cello"}
 _ORD_RE = r"(1st|2nd|3rd|4th|1ST|2ND|3RD|4TH|ist|lst|2no|3ro|4rh)"
 
 
@@ -358,6 +475,8 @@ def _ord_number(s):
 
 
 _VOCAB = ["trumpet", "trombone", "saxophone", "baritone", "tenor", "alto", "soprano",
+          "saksofon", "trabka", "puzon", "fortepian", "gitara", "perkusja", "skrzypce",
+          "wiolonczela", "kontrabas", "klarnet", "waltornia", "horn", "oboe", "bassoon",
           "guitar", "piano", "drums", "bass", "vocal", "voice", "flute", "clarinet",
           "violin", "viola", "cello", "violoncello", "tuba", "percussion", "bells",
           "conductor", "score", "triangle"]
@@ -385,7 +504,7 @@ def detect_instrument(text, stop_words=()):
     found = []
     sections = set()
     for line in text.splitlines():
-        low = " " + line.strip().lower() + " "
+        low = fold(line)
         for w in stop_words:
             low = re.sub(r"\b%s\b" % re.escape(w), " " * len(w), low)
         if len(low.strip()) < 2:

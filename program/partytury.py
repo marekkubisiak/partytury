@@ -53,8 +53,10 @@ class App(tk.Tk):
         self._render_queue = []
         self._ocr_running = False
         self._order = []
+        self.drop_ok = False
         self._build_ui()
         self._set_buttons()
+        self._enable_drop()
         if len(sys.argv) > 1 and os.path.isfile(sys.argv[1]):
             self.open_pdf(sys.argv[1])
 
@@ -86,6 +88,9 @@ class App(tk.Tk):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.grid_frame = tk.Frame(self.canvas, background="#e8e8e8")
         self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
+        self.hint = tk.Label(self.grid_frame, text="", background="#e8e8e8", foreground="#555555",
+                             font=("Segoe UI", 16), padx=60, pady=120, justify="center")
+        self.hint.pack()
         self.grid_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind_all("<MouseWheel>", self._wheel)
         self.canvas.bind_all("<Button-4>", lambda e: self.canvas.yview_scroll(-3, "units"))
@@ -138,6 +143,34 @@ class App(tk.Tk):
             self.bind(key, lambda e, d=d: self._move(d, e))
         self.bind("<Delete>", lambda e: self.toggle_excl() if self.focus_get() is not self.combo else None)
 
+    # ------------------------------------------------------------- przeciąganie plików
+    def _enable_drop(self):
+        """Przeciąganie PDF-ów na okno (biblioteka tkinterdnd2). Bez niej program działa normalnie."""
+        try:
+            from tkinterdnd2 import TkinterDnD, DND_FILES
+            TkinterDnD._require(self)
+            for w in (self, self.canvas, self.grid_frame, self.preview, self.hint):
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind("<<Drop>>", self._on_drop)
+            self.drop_ok = True
+        except Exception as ex:
+            self.drop_ok = False
+            print("Przeciąganie niedostępne:", ex)
+        self.hint.configure(text=("Przeciągnij tutaj plik PDF\nalbo kliknij „Otwórz PDF…”"
+                                  if self.drop_ok else "Kliknij „Otwórz PDF…”, żeby zacząć."))
+
+    def _on_drop(self, event):
+        files = [f for f in self.tk.splitlist(event.data) if f.lower().endswith(".pdf")]
+        if not files:
+            messagebox.showinfo("Przeciąganie", "To nie jest plik PDF.")
+            return event.action
+        self.open_pdf(files[0])
+        if len(files) > 1:
+            messagebox.showinfo("Przeciąganie",
+                                f"Otwarto pierwszy z {len(files)} plików: {os.path.basename(files[0])}.\n"
+                                "Żeby pracować na wielu plikach naraz, użyj przycisków „Wiele plików…”.")
+        return event.action
+
     def _wheel(self, e):
         w = self.winfo_containing(e.x_root, e.y_root)
         while w is not None and w is not self.canvas and w is not self.grid_frame:
@@ -182,6 +215,13 @@ class App(tk.Tk):
             cap.pack(fill="x")
             for w in (cell, img, cap):
                 w.bind("<Button-1>", lambda e, p=p: self.select(p))
+                if self.drop_ok:
+                    try:
+                        from tkinterdnd2 import DND_FILES
+                        w.drop_target_register(DND_FILES)
+                        w.dnd_bind("<<Drop>>", self._on_drop)
+                    except Exception:
+                        pass
             self.cells[p] = (cell, img, cap)
         self.canvas.yview_moveto(0)
         self._set_buttons()
@@ -581,7 +621,9 @@ def ask_part(parent, title):
     win.title(title)
     win.transient(parent)
     win.grab_set()
-    ttk.Label(win, text="Wybierz kategorię albo wpisz fragment nazwy partii (np. „Tenor”, „Trumpet 1”):",
+    ttk.Label(win, text="Wybierz grupę z listy albo wpisz nazwę partii po polsku lub angielsku, "
+                        "także skrótem – np. „Trumpet 1”, „Trąbka 1”, „Tr 1”, „Sax alt 2”, „AS 2”, "
+                        "„Klarnet basowy”, „Bone 3”:",
               padding=10, wraplength=380).pack()
     var = tk.StringVar(value=list(core.CATEGORIES)[0])
     cb = ttk.Combobox(win, textvariable=var, values=list(core.CATEGORIES), width=32, font=("Segoe UI", 11))

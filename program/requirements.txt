@@ -2,3 +2,4 @@ pypdf>=4
 pypdfium2>=4
 pillow
 numpy
+tkinterdnd2
