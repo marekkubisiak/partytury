@@ -1,6 +1,6 @@
 ﻿; Instalator programu PartiMaster (Inno Setup)
 #define AppName "PartiMaster"
-#define AppVer "1.4"
+#define AppVer "1.5"
 #define AppAuthor "Marek Kubisiak"
 
 [Setup]

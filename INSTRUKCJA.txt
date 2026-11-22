@@ -153,6 +153,24 @@ Pole „Nazwa partii zaczynającej się na tej stronie”
 
 
 ------------------------------------------------------------
+RAMKA „WYBRANE STRONY → WŁASNY PDF” – dowolne strony w jednym pliku
+------------------------------------------------------------
+Możesz sam wybrać kilka stron z lewej strony i zapisać je jako jeden PDF
+z własną nazwą (np. „Solo trąbki”, „Strony do próby”).
+   Ctrl+klik (Mac: ⌘+klik)  – dodaje stronę do zaznaczenia albo ją odejmuje
+   Shift+klik               – zaznacza wszystkie strony od poprzednio
+                              klikniętej do tej
+   Ctrl+A (Mac: ⌘+A)        – zaznacza wszystkie strony
+   zwykłe kliknięcie        – anuluje zaznaczenie (zostaje jedna strona)
+Zaznaczone strony mają niebieską ramkę i znaczek ☑ w podpisie, a w ramce
+widać, ile ich jest.
+[📄 Zapisz zaznaczone strony jako PDF…] – pojawi się okno zapisu: wpisz
+   własną nazwę pliku i kliknij „Zapisz”. Strony trafią do pliku
+   w kolejności numerów.
+Delete przy kilku zaznaczonych stronach usuwa (albo przywraca) je wszystkie.
+
+
+------------------------------------------------------------
 RAMKA „DUPLIKATY”
 ------------------------------------------------------------
 Program sam znajduje strony identyczne z wcześniejszymi (pomarańczowe).
@@ -169,7 +187,10 @@ KLAWIATURA
 ------------------------------------------------------------
 Strzałki         – poprzednia / następna strona (góra/dół = rząd wyżej/niżej)
 Enter            – (w polu nazwy) zatwierdza początek partii
-Delete           – usuwa / przywraca zaznaczoną stronę
+Delete           – usuwa / przywraca zaznaczoną stronę (lub zaznaczone)
+Ctrl+klik        – dodaje/odejmuje stronę do zaznaczenia (Mac: ⌘+klik)
+Shift+klik       – zaznacza zakres stron
+Ctrl+A           – zaznacza wszystkie strony (Mac: ⌘+A)
 Kółko myszy      – przewijanie miniatur
 
 
