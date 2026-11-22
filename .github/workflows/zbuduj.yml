@@ -1,4 +1,4 @@
-name: Zbuduj instalator
+name: Zbuduj instalator PartiMaster
 
 on:
   push:
@@ -25,9 +25,9 @@ jobs:
       - name: Tesseract OCR i Inno Setup
         run: choco install tesseract innosetup -y --no-progress
 
-      - name: Program -> Partytury.exe
+      - name: Program -> PartiMaster.exe
         run: >
-          pyinstaller --noconfirm --clean --windowed --name Partytury
+          pyinstaller --noconfirm --clean --windowed --name PartiMaster
           --icon program/partytury.ico --add-data "program/partytury.ico;."
           --collect-all pypdfium2 --collect-all pypdfium2_raw --collect-all tkinterdnd2
           program/partytury.py
@@ -38,17 +38,17 @@ jobs:
           $exe = Get-ChildItem 'C:\Program Files\Tesseract-OCR\tesseract.exe', 'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $exe) { $exe = Get-ChildItem 'C:\Program Files', 'C:\ProgramData\chocolatey' -Recurse -Filter tesseract.exe -ErrorAction SilentlyContinue | Select-Object -First 1 }
           if (-not $exe) { throw 'Nie znaleziono tesseract.exe' }
-          Copy-Item -Recurse $exe.DirectoryName dist\Partytury\tesseract
-          Remove-Item -Force -ErrorAction SilentlyContinue dist\Partytury\tesseract\uninstall.exe
-          & dist\Partytury\tesseract\tesseract.exe --version
-          & dist\Partytury\tesseract\tesseract.exe --list-langs
+          Copy-Item -Recurse $exe.DirectoryName dist\PartiMaster\tesseract
+          Remove-Item -Force -ErrorAction SilentlyContinue dist\PartiMaster\tesseract\uninstall.exe
+          & dist\PartiMaster\tesseract\tesseract.exe --version
+          & dist\PartiMaster\tesseract\tesseract.exe --list-langs
 
       - name: Test - czy program sie uruchamia (bez okna)
         shell: pwsh
         run: |
           python -c "import sys; sys.path.insert(0, 'program'); import partytury_core as c; print('ok', c.order_key('Trumpet 2'))"
 
-      - name: Zbuduj Partytury-setup.exe
+      - name: Zbuduj PartiMaster-setup.exe
         shell: pwsh
         run: |
           $iscc = Get-ChildItem 'C:\Program Files*\Inno Setup*\ISCC.exe' | Select-Object -First 1
@@ -58,13 +58,13 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Partytury-setup
-          path: Output/Partytury-setup.exe
+          name: PartiMaster-setup
+          path: Output/PartiMaster-setup.exe
 
       - name: Opublikuj w zakladce Releases
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v1.1.${{ github.run_number }}"
-          gh release create $tag Output/Partytury-setup.exe --title "Partytury $tag" --notes "Instalator programu Partytury. Pobierz Partytury-setup.exe i uruchom."
+          $tag = "v1.2.${{ github.run_number }}"
+          gh release create $tag Output/PartiMaster-setup.exe --title "PartiMaster $tag - Marek Kubisiak" --notes "Instalator programu PartiMaster (autor: Marek Kubisiak). Pobierz PartiMaster-setup.exe i uruchom."
